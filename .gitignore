@@ -5,3 +5,4 @@
 /pycache
 /.devcontainer
 /.venv
+__pycache__
