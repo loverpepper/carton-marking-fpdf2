@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-新版核心生成引擎 - 使用样式注册系统
+新版核心生成引擎 - 使用样式注册系统（fpdf2 版）
 """
-from PIL import Image, ImageDraw
 from pathlib import Path
+from fpdf import FPDF
 from style_base import StyleRegistry
 
-# 导入所有样式模块以自动注册
+# 只导入已完成 fpdf2 重构的样式模块（自动触发 @StyleRegistry.register 注册）
 # import style_mcombo_standard
 # import style_barberpub_topandbottom
 # import style_barberpub_doubleopening
@@ -18,13 +18,12 @@ from style_base import StyleRegistry
 # import style_mcombo_vertical
 # import style_New_market_GE_UK_FR_vertical
 # import style_New_market_GE_UK_FR_standard
-# import style_macrout_topandbottom
-# 未来在这里导入更多样式:
+import style_macrout_topandbottom   # fpdf2 版，已完成重构
+# 未来在这里导入更完成 fpdf2 重构的更多样式：
 # import style_simple
 # import style_premium
 # import style_custom_a
 # etc.
-#测试一下
 
 
 class SKUConfig:
@@ -98,72 +97,65 @@ class SKUConfig:
 
 
 class BoxMarkGenerator:
-    """箱唛生成器 - 使用样式系统"""
-    
+    """箱唛生成器 - fpdf2 版"""
+
     def __init__(self, base_dir, style_name="mcombo_standard", ppi=300):
         """
         Args:
-            base_dir: 资源基础目录
+            base_dir:   资源基础目录
             style_name: 使用的样式名称
-            ppi: 分辨率
+            ppi:        分辨率
         """
-        self.base_dir = base_dir
+        self.base_dir   = base_dir
         self.style_name = style_name
-        self.ppi = ppi
-        self.style = StyleRegistry.get_style(style_name, base_dir, ppi)
-    
-    def generate_complete_layout(self, sku_config):
-        """生成完整的箱唛布局 - 动态适配不同样式的布局"""
-        # 1. 从样式获取布局配置
-        layout = self.style.get_layout_config(sku_config)
-        panels_mapping = self.style.get_panels_mapping(sku_config)
-        
-        print(f"📐 开始使用样式 '{self.style_name}' 生成箱唛，布局格子: {len(layout)}")
-        
-        # 2. 计算画布总尺寸（根据布局的最大范围）
+        self.ppi        = ppi
+        self.style      = StyleRegistry.get_style(style_name, base_dir, ppi)
+
+    def generate_pdf(self, sku_config, output_path):
+        """
+        生成完整的箱唛 PDF 文件（fpdf2 直接渲染，文字可选取编辑）。
+
+        Args:
+            sku_config:   SKUConfig 实例
+            output_path:  输出 PDF 文件路径（str 或 Path）
+        """
+        layout = self.style.get_layout_config_mm(sku_config)
+
+        # 计算页面尺寸（mm）
         max_x = max(x + w for x, y, w, h in layout.values())
         max_y = max(y + h for x, y, w, h in layout.values())
-        
-        # 创建画布（白色背景，未填充的区域将显示为白色）
-   
-        canvas = Image.new(sku_config.color_mode, (int(max_x), int(max_y)), (255, 255, 255)) # RGB白色背景
-        # canvas = Image.new('CMYK', (int(max_x), int(max_y)), (0,0,0,0))  # CMYK透明背景（未填充区域为白色）
-        # 3. 让样式生成它需要的所有面板（动态适配不同样式）
-        panels_dict = self.style.generate_all_panels(sku_config)
-        
-        # 4. 根据映射关系动态粘贴面板
-        for region_name, panel_type in panels_mapping.items():
-            if region_name in layout and panel_type in panels_dict:
-                x, y, w, h = layout[region_name]
-                panel = panels_dict[panel_type]
-                canvas.paste(panel, (int(x), int(y)))
-        
-        # 6. 画出所有格子的边框（用于调试和验证）
-        draw = ImageDraw.Draw(canvas)
-        for name, (x, y, w, h) in layout.items():
-            shape = [x, y, x + w, y + h]
-            draw.rectangle(shape, outline=(0,0,0), width=3)
-        
-        print(f"🖼️ 完成布局渲染，画布尺寸: {canvas.width}x{canvas.height}px")
-        return canvas
-    
-    def save_as_pdf(self, canvas, output_path, sku_config):
-        """保存为 PDF 格式（与旧版保持一致：先转CMYK再转回RGB）"""
-        canvas.show()
-        
-        # 由RGB转CMYK以便印刷（用于颜色校准）
-        # canvas_cmyk = canvas.convert('CMYK')
-        # PDF需要RGB模式
-        # canvas_rgb = canvas_cmyk.convert('RGB')
-        canvas.save(output_path, "PDF", resolution=sku_config.ppi, quality=100)
-        # canvas_rgb.save(output_path, "PDF", resolution=sku_config.ppi, quality=100)
-        
-        total_width, total_height = canvas.size
+
+        print(f"📐 开始使用样式 '{self.style_name}' 生成箱唛，布局格子: {len(layout)}")
+
+        # 创建 PDF，页面大小恰好等于展开图尺寸
+        pdf = FPDF(unit='mm', format=(max_x, max_y))
+        pdf.set_auto_page_break(False)
+        pdf.add_page()
+
+        # 整体白色底（未被面板覆盖的区域显示为白色）
+        pdf.set_fill_color(255, 255, 255)
+        pdf.rect(0, 0, max_x, max_y, style='F')
+
+        # 注册字体（必须在 draw_to_pdf 之前调用）
+        self.style.register_fonts(pdf)
+
+        # 绘制所有面板
+        self.style.draw_to_pdf(pdf, sku_config)
+
+        # 绘制面板边框（裁切线 / 调试辅助）
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(0.5)
+        for _, (x, y, w, h) in layout.items():
+            pdf.rect(x, y, w, h)
+
+        pdf.output(str(output_path))
+
         print(f"✅ 箱唛已生成为PDF！文件: {output_path}")
         print(f"   样式: {self.style_name}")
-        print(f"   尺寸: {total_width}x{total_height}px ({total_width/sku_config.dpi:.1f}cm x {total_height/sku_config.dpi:.1f}cm)")
+        print(f"   尺寸: {max_x:.1f} x {max_y:.1f} mm  "
+              f"({max_x/10:.1f} cm x {max_y/10:.1f} cm)")
         print(f"   分辨率: {sku_config.ppi} PPI")
-    
+
     @staticmethod
     def list_available_styles():
         """列出所有可用的样式"""
@@ -171,10 +163,9 @@ class BoxMarkGenerator:
 
 
 def visualize_layout(sku_config, generator):
-    """可视化布局（兼容旧接口）"""
-    canvas = generator.generate_complete_layout(sku_config)
+    """生成箱唛 PDF 并保存到当前目录"""
     output_filename = f"{sku_config.sku_name}_carton_marking.pdf"
-    generator.save_as_pdf(canvas, output_filename, sku_config)
+    generator.generate_pdf(sku_config, output_filename)
 
 
 # --- 测试运行 ---
