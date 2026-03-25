@@ -1,0 +1,10 @@
+version: '3.8'
+# 直接强制指定纯英文项目名，无视任何中文文件夹！
+name: carton-marking-project
+services:
+  carton-marking:
+    build: .
+    container_name: carton-marking-app
+    ports:
+      - "8501:8501"
+    restart: always # 遇到崩溃会自动重启！

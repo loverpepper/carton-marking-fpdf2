@@ -1,0 +1,14 @@
+{
+  "registry-mirrors": [
+    "https://docker.m.daocloud.io",
+    "https://docker.nju.edu.cn",
+    "https://hub-mirror.c.163.com"
+  ],
+  "builder": {
+    "gc": {
+      "defaultKeepStorage": "20GB",
+      "enabled": true
+    }
+  },
+  "experimental": false
+}
