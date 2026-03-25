@@ -157,8 +157,10 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
 
     @staticmethod
     def _pil_bbox_mm(pil_font, text, ppi):
-        """返回 PIL getbbox 结果换算为 mm 的四元组 (left, top, right, bottom)"""
-        left, top, right, bottom = pil_font.getbbox(text)
+        """返回 PIL getbbox 结果换算为 mm 的四元组 (left, top, right, bottom)
+        使用 anchor='ls'：top 为负值（基线以上），bottom 为正值（基线以下），
+        与 _draw_text_lm / _draw_text_mt 的数学公式保持一致。"""
+        left, top, right, bottom = pil_font.getbbox(text, anchor='ls')
         px_per_mm = ppi / 25.4
         return left / px_per_mm, top / px_per_mm, right / px_per_mm, bottom / px_per_mm
 

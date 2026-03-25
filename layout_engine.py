@@ -66,11 +66,13 @@ class Text(Element):
             border_radius:    圆角半径（mm）
         """
         if pil_font is not None:
-            left, top, right, bottom = pil_font.getbbox(text)
+            # anchor='ls'：以基线为参考，top 为负值（上升部分），bottom 为正值（下降部分）
+            # 默认 anchor='la' 会让 top 为正值，导致 offset_y_mm 为负，基线被置于元素顶端以上
+            left, top, right, bottom = pil_font.getbbox(text, anchor='ls')
             px_per_mm = ppi / 25.4
             width = (right - left) / px_per_mm
             height = (bottom - top) / px_per_mm
-            # offset_y_mm：从元素顶端到文字基线（baseline）的距离（mm）
+            # offset_y_mm：从元素顶端（视觉顶端）到文字基线（baseline）的距离（mm）
             self.offset_y_mm = -top / px_per_mm
         else:
             # 无 PIL 字体时按字号近似计算

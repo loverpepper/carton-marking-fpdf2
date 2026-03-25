@@ -149,6 +149,13 @@ class BoxMarkGenerator:
             pdf.rect(x, y, w, h)
 
         pdf.output(str(output_path))
+        
+        # 增加文件输出后直接预览的功能（尝试使用默认 PDF 查看器打开生成的文件）
+        try:
+            import webbrowser
+            webbrowser.open(str(output_path))
+        except Exception as e:
+            print(f"⚠️ 无法预览 PDF 文件: {e}")
 
         print(f"✅ 箱唛已生成为PDF！文件: {output_path}")
         print(f"   样式: {self.style_name}")
