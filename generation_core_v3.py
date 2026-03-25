@@ -187,7 +187,7 @@ if __name__ == "__main__":
 
     box_number = {
         'total_boxes': 3,
-        'current_box': 2
+        'current_box': 1
     }
 
     legal_info = {
@@ -202,17 +202,17 @@ if __name__ == "__main__":
 
     # 创建 SKU 配置（使用新方式）
     test_sku = SKUConfig(
-        sku_name="6056-ST5782W",
-        length_cm=126,
-        width_cm=46,
-        height_cm=14,
-        style_name="macrout_topandbottom",  # 指定样式
+        sku_name="6160-R7891BE-1",
+        length_cm= 77,
+        width_cm=67.5,
+        height_cm=47,
+        style_name="mcombo_standard",  # 指定样式
         ppi=150,
         
-        color='(White)',
-        product='Storage Shed Shelves', # 可选参数
+        color='White',
+        product='Lift Recliner', # 可选参数
         product_fullname = 'TRAMPOLINE\nPREMIUM SPRING COVER', # 可选参数，Exacme 对开盖会用到
-        size='Zero Wall Hugger', # 可选参数，MCombo 标准样式的特定参数
+        size='Oversize', # 可选参数，MCombo 标准样式的特定参数
         side_text=sku_text,
         box_number=box_number,
         sponge_verified=True, # 是否通过海绵测试, 可选参数, Mcombo 和 新市场 样式会用到
@@ -229,7 +229,7 @@ if __name__ == "__main__":
     
     # 创建生成器
     base_dir = Path(__file__).parent
-    generator = BoxMarkGenerator(base_dir=base_dir, style_name="macrout_topandbottom", ppi=150)
+    generator = BoxMarkGenerator(base_dir=base_dir, style_name="mcombo_standard", ppi=150)
     
     # 生成箱唛
     visualize_layout(test_sku, generator)
