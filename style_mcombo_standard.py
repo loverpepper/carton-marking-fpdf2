@@ -122,18 +122,17 @@ class MComboStandardStyle(BoxMarkStyle):
         """加载字体路径"""
         font_base = self.base_dir / 'assets' / 'Mcombo' / '样式一' / '箱唛字体'
         self.font_paths = {
-            'calibri_bold': str(font_base / 'calibri_blod.ttf'),
-            'itc_demi':     str(font_base / 'ITC Avant Garde Gothic LT Demi.ttf'),
+            'Arial Bold': str(font_base / 'calibri-bold.ttf'),
+            'Arial':      str(font_base / 'avantgardelt-demi.ttf'),
         }
 
     # ── fpdf2 字体注册 ──────────────────────────────────────────────────────────
 
     def register_fonts(self, pdf: FPDF):
         """向 FPDF 对象注册本样式使用的所有字体"""
-        # 【核心修复】：不要叫 'CalibriBold'，要叫真实的家族名 'Calibri'，并指定样式为 'B' (Bold)
-        pdf.add_font('Calibri', 'B', self.font_paths['calibri_bold'])
-        # 【核心修复】：使用系统识别的真实英文字体全名
-        pdf.add_font('ITC Avant Garde Gothic LT', 'B', self.font_paths['itc_demi'])
+        # Calibri-Bold / AvantGardeLT-Demi 是 Illustrator 可识别的 PostScript 名
+        pdf.add_font('Calibri-Bold',      '', self.font_paths['Arial Bold'])
+        pdf.add_font('AvantGardeLT-Demi', '', self.font_paths['Arial'])
 
     # ── 核心绘制入口 ────────────────────────────────────────────────────────────
 
@@ -232,17 +231,6 @@ class MComboStandardStyle(BoxMarkStyle):
         pdf.set_text_color(r, g, b)
         pdf.set_font(font_family, font_style, font_size_pt)
         pdf.text(x_mm, baseline_y, text)
-
-    @staticmethod
-    def _barcode_on_white(barcode_img):
-        """将条形码图片（透明背景）合并到白底，返回 PIL Image。
-        fpdf2 并不识别透明 PNG 的正确 alpha 合成，需要手动先叠加白底。"""
-        bg = Image.new('RGB', barcode_img.size, (255, 255, 255))
-        if barcode_img.mode == 'RGBA':
-            bg.paste(barcode_img, mask=barcode_img.split()[3])
-        else:
-            bg.paste(barcode_img.convert('RGB'))
-        return bg
 
     @staticmethod
     def _draw_s_curve_bottom(pdf, panel_x, panel_y, panel_w, panel_h,
@@ -352,7 +340,7 @@ class MComboStandardStyle(BoxMarkStyle):
         # 字号比例：51/1332 × h_px  (与原始一致)
         color_size_px = int(h_mm * px_per_mm * 51 / 1332)
         color_size_pt = color_size_px * 72.0 / ppi
-        pil_color = ImageFont.truetype(self.font_paths['calibri_bold'], color_size_px)
+        pil_color = ImageFont.truetype(self.font_paths['Arial Bold'], color_size_px)
 
         _, top_c, _, bottom_c = self._pil_bbox_mm(pil_color, color_text, ppi)
         left_c, _, right_c, _ = self._pil_bbox_mm(pil_color, color_text, ppi)
@@ -379,7 +367,7 @@ class MComboStandardStyle(BoxMarkStyle):
                  style='F', round_corners=True, corner_radius=radius_mm)
 
         self._draw_text_top_left(pdf, color_x, color_y_top, color_text,
-                                 'Calibri', 'B', color_size_pt, pil_color, ppi,
+                                 'Calibri-Bold', '', color_size_pt, pil_color, ppi,
                                  color=(161, 142, 102))
 
         # ── 3. 产品名称 + 装饰椭圆 + 尺寸文字 ──────────────────────────────────
@@ -391,20 +379,20 @@ class MComboStandardStyle(BoxMarkStyle):
         size_size_px    = int(h_mm * px_per_mm * 60  / 1332)
 
         # 产品名宽度不超过面板 85%
-        pil_product = ImageFont.truetype(self.font_paths['itc_demi'], product_size_px)
+        pil_product = ImageFont.truetype(self.font_paths['Arial'], product_size_px)
         p_left, p_top, p_right, p_bottom = pil_product.getbbox(product_text)
         product_w_px = p_right - p_left
         max_product_w_px = int(w_mm * px_per_mm * 0.85)
         if product_w_px > max_product_w_px:
             product_size_px = int(product_size_px * max_product_w_px / product_w_px)
-            pil_product = ImageFont.truetype(self.font_paths['itc_demi'], product_size_px)
+            pil_product = ImageFont.truetype(self.font_paths['Arial'], product_size_px)
             p_left, p_top, p_right, p_bottom = pil_product.getbbox(product_text)
             product_w_px = p_right - p_left
         product_size_pt = product_size_px * 72.0 / ppi
         product_w_mm = product_w_px / px_per_mm
         product_h_mm = (p_bottom - p_top) / px_per_mm
 
-        pil_size = ImageFont.truetype(self.font_paths['calibri_bold'], size_size_px)
+        pil_size = ImageFont.truetype(self.font_paths['Arial Bold'], size_size_px)
         s_left, s_top, s_right, s_bottom = pil_size.getbbox(size_text)
         size_w_mm = (s_right - s_left) / px_per_mm
         size_h_mm = (s_bottom - s_top) / px_per_mm
@@ -434,7 +422,7 @@ class MComboStandardStyle(BoxMarkStyle):
         self._draw_text_top_left(pdf, product_x,
                                  group_start_y - product_offset_mm,
                                  product_text,
-                                 'ITC Avant Garde Gothic LT', 'B', product_size_pt, pil_product, ppi)
+                                 'AvantGardeLT-Demi', '', product_size_pt, pil_product, ppi)
 
         # 装饰椭圆（黑色）
         line_y = group_start_y + product_h_mm + gap_mm
@@ -446,7 +434,7 @@ class MComboStandardStyle(BoxMarkStyle):
         size_y_top = line_y + line_h_mm + gap_mm + size_offset_mm
         size_x = x_mm + (w_mm - size_w_mm) / 2.0
         self._draw_text_top_left(pdf, size_x, size_y_top,
-                                 size_text, 'Calibri', 'B', size_size_pt, pil_size, ppi)
+                                 size_text, 'Calibri-Bold', '', size_size_pt, pil_size, ppi)
 
         # ── 4. 底部黑色底框（S 形过渡）──────────────────────────────────────────
         icon_company = self.resources['icon_company']
@@ -494,13 +482,13 @@ class MComboStandardStyle(BoxMarkStyle):
         sku_max_h_mm = 80.0
 
         sku_size_pt, pil_sku = self._get_font_size(
-            sku_text, 'calibri_bold', sku_max_w_mm, ppi)
+            sku_text, 'Arial Bold', sku_max_w_mm, ppi)
         _, sku_top, _, sku_bottom = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_h_mm = sku_bottom - sku_top
         # 若超出高度限制，按高宽比缩减
         if sku_h_mm > sku_max_h_mm:
             sku_size_pt, pil_sku = self._get_font_size(
-                sku_text, 'calibri_bold',
+                sku_text, 'Arial Bold',
                 sku_max_w_mm * sku_max_h_mm / sku_h_mm, ppi)
             _, sku_top, _, sku_bottom = self._pil_bbox_mm(pil_sku, sku_text, ppi)
             sku_h_mm = sku_bottom - sku_top
@@ -509,7 +497,7 @@ class MComboStandardStyle(BoxMarkStyle):
         sku_center_y = y_mm + h_mm - h_right_mm / 2.0 + 3.0   # 下移 0.3cm
 
         self._draw_text_mid_center(pdf, sku_center_x, sku_center_y,
-                                   sku_text, 'Calibri', 'B', sku_size_pt, pil_sku, ppi,
+                                   sku_text, 'Calibri-Bold', '', sku_size_pt, pil_sku, ppi,
                                    color=(161, 142, 102))
 
     def _draw_side_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
@@ -550,12 +538,12 @@ class MComboStandardStyle(BoxMarkStyle):
         sku_max_h_mm = 80.0   # 8 cm
 
         sku_size_pt, pil_sku = self._get_font_size(
-            sku_text, 'calibri_bold', sku_max_w_mm, ppi)
+            sku_text, 'Arial Bold', sku_max_w_mm, ppi)
         _, sku_top, _, sku_bottom = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_h_mm = sku_bottom - sku_top
         if sku_h_mm > sku_max_h_mm:
             sku_size_pt, pil_sku = self._get_font_size(
-                sku_text, 'calibri_bold',
+                sku_text, 'Arial Bold',
                 sku_max_w_mm * sku_max_h_mm / sku_h_mm, ppi)
 
         sku_area_left_mm  = 30.0               # 3cm
@@ -564,7 +552,7 @@ class MComboStandardStyle(BoxMarkStyle):
         sku_center_y = y_mm + h_mm - h_left_mm / 2.0 + 3.0   # 下移 0.3cm
 
         self._draw_text_mid_center(pdf, sku_center_x, sku_center_y,
-                                   sku_text, 'Calibri', 'B', sku_size_pt, pil_sku, ppi,
+                                   sku_text, 'Calibri-Bold', '', sku_size_pt, pil_sku, ppi,
                                    color=(161, 142, 102))
 
         # ── 2. 侧唛标签框（左上角 3cm, 3cm）──────────────────────────────────
@@ -637,9 +625,9 @@ class MComboStandardStyle(BoxMarkStyle):
         bold_px    = int(h_mm * px_per_mm * 0.095)
         barcode_px = int(h_mm * px_per_mm * 0.058)
 
-        pil_label   = ImageFont.truetype(self.font_paths['itc_demi'],     label_px)
-        pil_bold    = ImageFont.truetype(self.font_paths['calibri_bold'], bold_px)
-        pil_barcode = ImageFont.truetype(self.font_paths['calibri_bold'], barcode_px)
+        pil_label   = ImageFont.truetype(self.font_paths['Arial'],     label_px)
+        pil_bold    = ImageFont.truetype(self.font_paths['Arial Bold'], bold_px)
+        pil_barcode = ImageFont.truetype(self.font_paths['Arial Bold'], barcode_px)
 
         label_pt   = label_px   * 72.0 / ppi
         bold_pt    = bold_px    * 72.0 / ppi
@@ -654,9 +642,9 @@ class MComboStandardStyle(BoxMarkStyle):
                     f'{sku_config.w_in:.1f}\'\' x {sku_config.h_in:.1f}\'\'')
 
         self._draw_text_top_left(pdf, text_x, y_mm + h_mm * 0.044,
-                                 weight_text, 'ITC Avant Garde Gothic LT', 'B', label_pt, pil_label, ppi)
+                                 weight_text, 'AvantGardeLT-Demi', '', label_pt, pil_label, ppi)
         self._draw_text_top_left(pdf, text_x, y_mm + h_mm * 0.214,
-                                 dim_text, 'ITC Avant Garde Gothic LT', 'B', label_pt, pil_label, ppi)
+                                 dim_text, 'AvantGardeLT-Demi', '', label_pt, pil_label, ppi)
 
         # 条形码区域参数
         left_center_mm  = x_mm + w_mm * 0.46    # SKU 条码中心
@@ -672,13 +660,13 @@ class MComboStandardStyle(BoxMarkStyle):
             int(sku_bc_w_mm * px_per_mm),
             int(barcode_h_mm * px_per_mm),
         )
-        pdf.image(self._barcode_on_white(sku_bc_img),
+        pdf.image(sku_bc_img,
                   x=left_center_mm - sku_bc_w_mm / 2.0,
                   y=barcode_y_mm,
                   w=sku_bc_w_mm, h=barcode_h_mm)
         self._draw_text_top_center(pdf, left_center_mm, barcode_text_y,
                                    sku_config.sku_name,
-                                   'Calibri', 'B', barcode_pt, pil_barcode, ppi)
+                                   'Calibri-Bold', '', barcode_pt, pil_barcode, ppi)
 
         # SN 条形码
         sn_code = sku_config.side_text['sn_code']
@@ -688,15 +676,15 @@ class MComboStandardStyle(BoxMarkStyle):
             int(sn_bc_w_mm * px_per_mm),
             int(barcode_h_mm * px_per_mm),
         )
-        pdf.image(self._barcode_on_white(sn_bc_img),
+        pdf.image(sn_bc_img,
                   x=right_center_mm - sn_bc_w_mm / 2.0,
                   y=barcode_y_mm,
                   w=sn_bc_w_mm, h=barcode_h_mm)
         self._draw_text_top_center(pdf, right_center_mm, barcode_text_y,
                                    sn_code,
-                                   'Calibri', 'B', barcode_pt, pil_barcode, ppi)
+                                   'Calibri-Bold', '', barcode_pt, pil_barcode, ppi)
 
         # MADE IN CHINA（或自定义产地文字）
         made_text = sku_config.side_text.get('origin_text', 'MADE IN CHINA')
         self._draw_text_top_left(pdf, x_mm + w_mm * 0.51, y_mm + h_mm * 0.87,
-                                 made_text, 'Calibri', 'B', bold_pt, pil_bold, ppi)
+                                 made_text, 'Calibri-Bold', '', bold_pt, pil_bold, ppi)
