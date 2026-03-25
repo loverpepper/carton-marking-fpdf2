@@ -4,7 +4,6 @@ Macrout 天地盖样式 - fpdf2 版
 """
 from fpdf import FPDF
 from PIL import Image, ImageFont
-from io import BytesIO
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
 from general_functions import generate_barcode_image
@@ -76,15 +75,15 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
     # ── 资源 / 字体加载 ─────────────────────────────────────────────────────────
 
     def _load_resources(self):
-        """加载 Macrout 天地盖样式的图片资源（PIL Image）"""
+        """加载 Macrout 天地盖样式的图片资源路径（fpdf2 直接接受路径，无需 PIL 预加载）"""
         res_base = self.base_dir / 'assets' / 'Macrout' / '天地盖' / '矢量文件'
         self.resources = {
-            'icon_logo':          Image.open(res_base / 'Macrout.png').convert('RGBA'),
-            'icon_notice':        Image.open(res_base / '箱子提示语.png').convert('RGBA'),
-            'icon_web':           Image.open(res_base / '公司信息.png').convert('RGBA'),
-            'icon_attention':     Image.open(res_base / '标签.png').convert('RGBA'),
-            'icon_label':         Image.open(res_base / '箱子信息.png').convert('RGBA'),
-            'icon_paste_barcode': Image.open(res_base / '条形码定界框.png').convert('RGBA'),
+            'icon_logo':          res_base / 'Macrout.png',
+            'icon_notice':        res_base / '箱子提示语.png',
+            'icon_web':           res_base / '公司信息.png',
+            'icon_attention':     res_base / '标签.png',
+            'icon_label':         res_base / '箱子信息.png',
+            'icon_paste_barcode': res_base / '条形码定界框.png',
         }
 
     def _load_fonts(self):
@@ -188,31 +187,15 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         pdf.text(x_mm, baseline_y, text)
 
     @staticmethod
-    def _img_to_buf(pil_img):
-        """将 PIL Image 转为 PNG BytesIO，供 pdf.image() 使用"""
-        buf = BytesIO()
-        if pil_img.mode not in ('RGB', 'RGBA'):
-            pil_img = pil_img.convert('RGBA')
-        pil_img.save(buf, format='PNG')
-        buf.seek(0)
-        return buf
-
-    @staticmethod
-    def _barcode_to_buf(barcode_img):
-        """
-        将条形码图片（透明背景）合并到白底后转为 PNG BytesIO。
-        使用 alpha 通道作为 mask 进行正确的 alpha 合成，
-        确保透明区域渲染为白色，条形码黑色部分保持不变。
-        """
+    def _barcode_on_white(barcode_img):
+        """将条形码图片（透明背景）合并到白底，返回 PIL Image。
+        fpdf2 并不识别透明 PNG 的正确 alpha 合成，需要手动先叠加白底。"""
         bg = Image.new('RGB', barcode_img.size, (255, 255, 255))
         if barcode_img.mode == 'RGBA':
             bg.paste(barcode_img, mask=barcode_img.split()[3])
         else:
             bg.paste(barcode_img.convert('RGB'))
-        buf = BytesIO()
-        bg.save(buf, format='PNG')
-        buf.seek(0)
-        return buf
+        return bg
 
     # ── 面板绘制方法 ────────────────────────────────────────────────────────────
 
@@ -296,9 +279,10 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         sku_pt, pil_sku = self._get_font_size(
             sku_text, 'Arial Rounded MT Bold', w_mm * 0.41, ppi)
 
-        icon_label = self.resources['icon_label']
-        label_w_mm = w_mm * 0.4
-        label_h_mm = label_w_mm * icon_label.height / icon_label.width
+        # engine.Image 会从文件头读取宽高比，自动算出 height
+        label_img = engine.Image(self.resources['icon_label'], width=w_mm * 0.4)
+        label_w_mm = label_img.width
+        label_h_mm = label_img.height
 
         main_row = engine.Row(
             align='center', justify='space-between',
@@ -307,7 +291,7 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
             children=[
                 engine.Text(sku_text, 'ArialRounded', '', sku_pt,
                             pil_font=pil_sku, ppi=ppi),
-                engine.Image(icon_label, width=label_w_mm, height=label_h_mm),
+                label_img,
             ]
         )
 
@@ -354,8 +338,8 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         nat_x = cx - nat_w / 2.0
         nat_y = cy - nat_h / 2.0
 
-        # 条形码定界框：先旋转 90° 变横向，再随整体旋转回来
-        icon_barcode_frame = self.resources['icon_paste_barcode'].rotate(90, expand=True)
+        # 条形码定界框：按需打开并旋转 90° 变横向，再随整体旋转回来
+        icon_barcode_frame = Image.open(self.resources['icon_paste_barcode']).rotate(90, expand=True)
         barcode_frame_h_mm = 50.0  # 5 cm
 
         sku_text = sku_config.sku_name
@@ -433,7 +417,7 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
             int(sku_bc_w_mm * px_per_mm),
             int(bc_h_mm * px_per_mm),
         )
-        pdf.image(self._barcode_to_buf(sku_bc_img),
+        pdf.image(self._barcode_on_white(sku_bc_img),
                   x=sku_bc_x, y=sku_bc_y, w=sku_bc_w_mm, h=bc_h_mm)
 
         # SKU 条形码下方文字（顶-中对齐）
@@ -454,7 +438,7 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
             int(sn_bc_w_mm * px_per_mm),
             int(bc_h_mm * px_per_mm),
         )
-        pdf.image(self._barcode_to_buf(sn_bc_img),
+        pdf.image(self._barcode_on_white(sn_bc_img),
                   x=sn_bc_x, y=sn_bc_y, w=sn_bc_w_mm, h=bc_h_mm)
 
         # SN 条形码下方文字（顶-中对齐）

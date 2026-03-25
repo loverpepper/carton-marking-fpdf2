@@ -6,7 +6,7 @@
 from fpdf import FPDF
 from PIL import Image as PILImage
 from abc import ABC, abstractmethod
-from io import BytesIO
+import pathlib
 
 
 class Element(ABC):
@@ -112,11 +112,19 @@ class Text(Element):
 
 
 class Image(Element):
-    def __init__(self, image: PILImage.Image, width=None, height=None, ppi=300, **kwargs):
+    def __init__(self, image, width=None, height=None, ppi=300, **kwargs):
         """
-        width / height 均为 mm；ppi 仅在两者均为 None 时用于推算自然尺寸
+        image: PIL Image、str 路径或 pathlib.Path。
+        fpdf2 三种格式均原生支持，不需要 BytesIO 中间转换。
+        width / height 均为 mm；ppi 仅在两者均为 None 时用于推算自然尺寸。
         """
-        orig_w, orig_h = image.width, image.height
+        if isinstance(image, (str, pathlib.Path)):
+            # 仅读取文件头获取尺寸，不加载像素数据
+            with PILImage.open(image) as _img:
+                orig_w, orig_h = _img.size
+        else:
+            orig_w, orig_h = image.width, image.height
+
         if width is not None and height is None:
             height = width * orig_h / orig_w
         elif height is not None and width is None:
@@ -125,20 +133,15 @@ class Image(Element):
             width = orig_w * 25.4 / ppi
             height = orig_h * 25.4 / ppi
 
-        self.pil_image = image
+        self._source = image  # Path、str 或 PIL Image，fpdf2 均可直接使用
         super().__init__(width=float(width), height=float(height), **kwargs)
 
     def layout(self, x, y, max_width=0):
         return super().layout(x, y, max_width)
 
     def render(self, pdf: FPDF):
-        buf = BytesIO()
-        img = self.pil_image
-        if img.mode not in ('RGBA', 'RGB'):
-            img = img.convert('RGBA')
-        img.save(buf, format='PNG')
-        buf.seek(0)
-        pdf.image(buf, x=self.x, y=self.y, w=self.width, h=self.height)
+        # fpdf2 原生支持 PIL Image、文件路径、BytesIO，无需手动转换
+        pdf.image(self._source, x=self.x, y=self.y, w=self.width, h=self.height)
 
 
 class Column(Element):
