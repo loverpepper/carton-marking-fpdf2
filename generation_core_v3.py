@@ -7,7 +7,7 @@ from fpdf import FPDF
 from style_base import StyleRegistry
 
 # 只导入已完成 fpdf2 重构的样式模块（自动触发 @StyleRegistry.register 注册）
-# import style_mcombo_standard
+import style_mcombo_standard
 # import style_barberpub_topandbottom
 # import style_barberpub_doubleopening
 # import style_barberpub_fulloverlap
