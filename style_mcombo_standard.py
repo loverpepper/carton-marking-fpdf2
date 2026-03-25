@@ -4,7 +4,6 @@ MCombo 标准样式 - fpdf2 版
 """
 from fpdf import FPDF
 from PIL import Image, ImageFont
-from io import BytesIO
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
 from general_functions import generate_barcode_image
@@ -93,9 +92,11 @@ class MComboStandardStyle(BoxMarkStyle):
     # ── 资源 / 字体加载 ─────────────────────────────────────────────────────────
 
     def _load_resources(self):
-        """加载 MCombo 标准样式的图片资源"""
+        """加载 MCombo 标准样式的图片资源。
+        翻盖图标因需要旋转操作，保留为 PIL Image；其余资源存储为路径，fpdf2 直接接受。"""
         res_base = self.base_dir / 'assets' / 'Mcombo' / '样式一' / '矢量文件'
         self.resources = {
+            # 翻盖图标需要 PIL 旋转，保留为 PIL Image
             'icon_left_2_panel':    Image.open(res_base / '顶部-左-2箱.png').convert('RGBA'),
             'icon_left_3_panel':    Image.open(res_base / '顶部-左-3箱.png').convert('RGBA'),
             'icon_right_2-1_panel': Image.open(res_base / '顶部-右-2-1.png').convert('RGBA'),
@@ -103,14 +104,16 @@ class MComboStandardStyle(BoxMarkStyle):
             'icon_right_3-1_panel': Image.open(res_base / '顶部-右-3-1.png').convert('RGBA'),
             'icon_right_3-2_panel': Image.open(res_base / '顶部-右-3-2.png').convert('RGBA'),
             'icon_right_3-3_panel': Image.open(res_base / '顶部-右-3-3.png').convert('RGBA'),
-            'icon_trademark':       Image.open(res_base / '正唛logo.png').convert('RGBA'),
-            'icon_company':         Image.open(res_base / '正唛公司信息.png').convert('RGBA'),
-            'icon_box_number_1':    Image.open(res_base / '正唛 Box 1.png').convert('RGBA'),
-            'icon_box_number_2':    Image.open(res_base / '正唛 Box 2.png').convert('RGBA'),
-            'icon_box_number_3':    Image.open(res_base / '正唛 Box 3.png').convert('RGBA'),
-            'icon_side_label_box':  Image.open(res_base / '侧唛标签框.png').convert('RGBA'),
-            'icon_side_logo':       Image.open(res_base / '侧唛logo.png').convert('RGBA'),
-            'icon_side_text_box':   Image.open(res_base / '侧唛文本框.png').convert('RGBA'),
+            # 静态图标存储为路径，fpdf2 直接接受路径，无需 PIL 预加载
+            'icon_trademark':       res_base / '正唛logo.png',
+            'icon_company':         res_base / '正唛公司信息.png',
+            'icon_box_number_1':    res_base / '正唛 Box 1.png',
+            'icon_box_number_2':    res_base / '正唛 Box 2.png',
+            'icon_box_number_3':    res_base / '正唛 Box 3.png',
+            'icon_side_label_box':  res_base / '侧唛标签框.png',
+            'icon_side_logo':       res_base / '侧唛logo.png',
+            'icon_side_text_box':   res_base / '侧唛文本框.png',
+            # 海绵认证图需要颜色处理，保留为 PIL Image
             'icon_side_sponge':     general_functions.make_it_pure_black(
                                         Image.open(res_base / '海绵认证.png').convert('RGBA')),
         }
@@ -233,27 +236,15 @@ class MComboStandardStyle(BoxMarkStyle):
         pdf.text(x_mm, baseline_y, text)
 
     @staticmethod
-    def _img_to_buf(pil_img):
-        """将 PIL Image 转为 PNG BytesIO，供 pdf.image() 使用"""
-        buf = BytesIO()
-        if pil_img.mode not in ('RGB', 'RGBA'):
-            pil_img = pil_img.convert('RGBA')
-        pil_img.save(buf, format='PNG')
-        buf.seek(0)
-        return buf
-
-    @staticmethod
-    def _barcode_to_buf(barcode_img):
-        """将条形码图片合并到白底后转为 PNG BytesIO"""
+    def _barcode_on_white(barcode_img):
+        """将条形码图片（透明背景）合并到白底，返回 PIL Image。
+        fpdf2 并不识别透明 PNG 的正确 alpha 合成，需要手动先叠加白底。"""
         bg = Image.new('RGB', barcode_img.size, (255, 255, 255))
         if barcode_img.mode == 'RGBA':
             bg.paste(barcode_img, mask=barcode_img.split()[3])
         else:
             bg.paste(barcode_img.convert('RGB'))
-        buf = BytesIO()
-        bg.save(buf, format='PNG')
-        buf.seek(0)
-        return buf
+        return bg
 
     @staticmethod
     def _draw_s_curve_bottom(pdf, panel_x, panel_y, panel_w, panel_h,
@@ -315,7 +306,7 @@ class MComboStandardStyle(BoxMarkStyle):
         icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
         img_x = x_mm + (w_mm - icon_w_mm) / 2.0
         img_y = y_mm + (h_mm - icon_h_mm) / 2.0
-        pdf.image(self._img_to_buf(icon_to_use), x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
+        pdf.image(icon_to_use, x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
 
     def _draw_flap_right(self, pdf: FPDF, sku_config,
                          x_mm, y_mm, w_mm, h_mm, rotate_180=False):
@@ -337,7 +328,7 @@ class MComboStandardStyle(BoxMarkStyle):
         icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
         img_x = x_mm + (w_mm - icon_w_mm) / 2.0
         img_y = y_mm + (h_mm - icon_h_mm) / 2.0
-        pdf.image(self._img_to_buf(icon_to_use), x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
+        pdf.image(icon_to_use, x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
 
     def _draw_front_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
         """绘制正面（正唛）面板"""
@@ -347,14 +338,16 @@ class MComboStandardStyle(BoxMarkStyle):
         # ── 1. 商标 Logo（居中顶部，高度 = 面板高度 / 3）──────────────────────
         icon_trademark = self.resources['icon_trademark']
         tm_h_mm = h_mm / 3.0
-        tm_w_mm = tm_h_mm * icon_trademark.width / icon_trademark.height
+        with Image.open(icon_trademark) as _img:
+            _tm_w, _tm_h = _img.size
+        tm_w_mm = tm_h_mm * _tm_w / _tm_h
         # 宽度不超过面板 90%
         if tm_w_mm > w_mm * 0.9:
             tm_w_mm = w_mm * 0.9
-            tm_h_mm = tm_w_mm * icon_trademark.height / icon_trademark.width
+            tm_h_mm = tm_w_mm * _tm_h / _tm_w
         tm_x = x_mm + (w_mm - tm_w_mm) / 2.0
         tm_y = y_mm
-        pdf.image(self._img_to_buf(icon_trademark), x=tm_x, y=tm_y, w=tm_w_mm, h=tm_h_mm)
+        pdf.image(icon_trademark, x=tm_x, y=tm_y, w=tm_w_mm, h=tm_h_mm)
 
         # ── 2. 颜色标签（右上角，黑色圆角背景 + 金色文字）──────────────────────
         color_text = str(sku_config.color)
@@ -460,8 +453,9 @@ class MComboStandardStyle(BoxMarkStyle):
         # ── 4. 底部黑色底框（S 形过渡）──────────────────────────────────────────
         icon_company = self.resources['icon_company']
         icon_company_h_mm = 16.0   # 1.6 cm
-        icon_company_w_mm = (icon_company_h_mm
-                             * icon_company.width / icon_company.height)
+        with Image.open(icon_company) as _img:
+            _cw, _ch = _img.size
+        icon_company_w_mm = icon_company_h_mm * _cw / _ch
 
         # left_section_w = 1cm + logo_w + 4cm  （S 曲线起点在 left_section_w - 10cm）
         left_section_w_mm = 10.0 + icon_company_w_mm + 40.0
@@ -478,7 +472,7 @@ class MComboStandardStyle(BoxMarkStyle):
         # 公司信息 Logo（位于底框顶部）
         bottom_gb_h_mm = sku_config.bottom_gb_h * 10.0
         company_y = y_mm + h_mm - bottom_gb_h_mm
-        pdf.image(self._img_to_buf(icon_company),
+        pdf.image(icon_company,
                   x=x_mm + 10.0, y=company_y,
                   w=icon_company_w_mm, h=icon_company_h_mm)
 
@@ -486,9 +480,11 @@ class MComboStandardStyle(BoxMarkStyle):
         current_box = sku_config.box_number['current_box']
         icon_box = self.resources[f'icon_box_number_{current_box}']
         box_icon_h_mm = h_right_mm / 4.0   # 底框高度 25%
-        box_icon_w_mm = box_icon_h_mm * icon_box.width / icon_box.height
+        with Image.open(icon_box) as _img:
+            _bw, _bh = _img.size
+        box_icon_w_mm = box_icon_h_mm * _bw / _bh
         box_icon_y = y_mm + h_mm - h_left_mm + (h_left_mm - box_icon_h_mm) / 2.0
-        pdf.image(self._img_to_buf(icon_box),
+        pdf.image(icon_box,
                   x=x_mm + 10.0, y=box_icon_y,
                   w=box_icon_w_mm, h=box_icon_h_mm)
 
@@ -527,8 +523,9 @@ class MComboStandardStyle(BoxMarkStyle):
         # ── 1. 底部黑色底框（S 形过渡，侧唛左高右低）──────────────────────────
         icon_company = self.resources['icon_company']
         icon_company_h_mm = 16.0
-        icon_company_w_mm = (icon_company_h_mm
-                             * icon_company.width / icon_company.height)
+        with Image.open(icon_company) as _img:
+            _cw, _ch = _img.size
+        icon_company_w_mm = icon_company_h_mm * _cw / _ch
 
         h_left_mm  = sku_config.bottom_gb_h * 10.0  # 左侧（高块），单位 mm
         h_right_mm = h_left_mm * 0.5                # 右侧（矮块）
@@ -575,8 +572,10 @@ class MComboStandardStyle(BoxMarkStyle):
         # ── 2. 侧唛标签框（左上角 3cm, 3cm）──────────────────────────────────
         icon_label_box = self.resources['icon_side_label_box']
         label_h_mm = 50.0   # 5 cm
-        label_w_mm = label_h_mm * icon_label_box.width / icon_label_box.height
-        pdf.image(self._img_to_buf(icon_label_box),
+        with Image.open(icon_label_box) as _img:
+            _lw, _lh = _img.size
+        label_w_mm = label_h_mm * _lw / _lh
+        pdf.image(icon_label_box,
                   x=x_mm + 30.0, y=y_mm + 30.0,
                   w=label_w_mm, h=label_h_mm)
 
@@ -584,20 +583,24 @@ class MComboStandardStyle(BoxMarkStyle):
         icon_side_logo = self.resources['icon_side_logo']
         side_logo_h_mm = 50.0   # 5 cm
         max_logo_w_mm  = (w_mm - 80.0) * 0.5   # (w - 8cm) / 2
-        side_logo_w_mm = side_logo_h_mm * icon_side_logo.width / icon_side_logo.height
+        with Image.open(icon_side_logo) as _img:
+            _sw, _sh = _img.size
+        side_logo_w_mm = side_logo_h_mm * _sw / _sh
         if side_logo_w_mm > max_logo_w_mm:
             side_logo_w_mm = max_logo_w_mm
-            side_logo_h_mm = side_logo_w_mm * icon_side_logo.height / icon_side_logo.width
+            side_logo_h_mm = side_logo_w_mm * _sh / _sw
         logo_x = x_mm + w_mm - side_logo_w_mm - 40.0   # 4cm from right
         logo_y = y_mm + 40.0                             # 4cm from top
-        pdf.image(self._img_to_buf(icon_side_logo),
+        pdf.image(icon_side_logo,
                   x=logo_x, y=logo_y,
                   w=side_logo_w_mm, h=side_logo_h_mm)
 
         # ── 4. 侧唛文本框（含 G.W.、尺寸、条形码）──────────────────────────────
         icon_text_box = self.resources['icon_side_text_box']
         table_h_mm = 80.0   # 8 cm
-        table_w_mm = table_h_mm * icon_text_box.width / icon_text_box.height
+        with Image.open(icon_text_box) as _img:
+            _tw, _th = _img.size
+        table_w_mm = table_h_mm * _tw / _th
 
         spacing_left_mm   = 28.1   # 2.81 cm
         spacing_bottom_mm = 30.0   # 3 cm
@@ -610,14 +613,14 @@ class MComboStandardStyle(BoxMarkStyle):
             icon_sponge = self.resources['icon_side_sponge']
             sponge_w_mm = table_h_mm * icon_sponge.width / icon_sponge.height
             sponge_x = x_mm + spacing_left_mm
-            pdf.image(self._img_to_buf(icon_sponge),
+            pdf.image(icon_sponge,
                       x=sponge_x, y=table_y,
                       w=sponge_w_mm, h=table_h_mm)
             table_x = sponge_x + sponge_w_mm + 1.0   # 0.1cm 间距
         else:
             table_x = x_mm + spacing_left_mm
 
-        pdf.image(self._img_to_buf(icon_text_box),
+        pdf.image(icon_text_box,
                   x=table_x, y=table_y,
                   w=table_w_mm, h=table_h_mm)
 
@@ -671,7 +674,7 @@ class MComboStandardStyle(BoxMarkStyle):
             int(sku_bc_w_mm * px_per_mm),
             int(barcode_h_mm * px_per_mm),
         )
-        pdf.image(self._barcode_to_buf(sku_bc_img),
+        pdf.image(self._barcode_on_white(sku_bc_img),
                   x=left_center_mm - sku_bc_w_mm / 2.0,
                   y=barcode_y_mm,
                   w=sku_bc_w_mm, h=barcode_h_mm)
@@ -687,7 +690,7 @@ class MComboStandardStyle(BoxMarkStyle):
             int(sn_bc_w_mm * px_per_mm),
             int(barcode_h_mm * px_per_mm),
         )
-        pdf.image(self._barcode_to_buf(sn_bc_img),
+        pdf.image(self._barcode_on_white(sn_bc_img),
                   x=right_center_mm - sn_bc_w_mm / 2.0,
                   y=barcode_y_mm,
                   w=sn_bc_w_mm, h=barcode_h_mm)
