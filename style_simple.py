@@ -124,8 +124,8 @@ class SimpleStyle(BoxMarkStyle):
         left_b, _, right_b, _ = pil_box.getbbox(box_text, anchor='ls')
         box_w_mm = (right_b - left_b) / px_per_mm
         box_ascent_mm = -top_b / px_per_mm
-        box_x = x_mm + w_mm - box_w_mm - 20.0     # 2 cm from right
-        box_baseline = (y_mm + h_mm - 30.0) + box_ascent_mm   # 3 cm from bottom
+        box_x = x_mm + w_mm - box_w_mm - 20.0     # 20 mm from right
+        box_baseline = (y_mm + h_mm - 30.0) + box_ascent_mm   # 30 mm from bottom
 
         pdf.set_font('Calibri-Bold', '', box_size_pt)
         pdf.text(box_x, box_baseline, box_text)
