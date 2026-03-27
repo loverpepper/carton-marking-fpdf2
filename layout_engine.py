@@ -99,10 +99,13 @@ class Text(Element):
             bg_w = self.width + 2 * self.padding_x
             bg_h = self.height + 2 * self.padding_y
             r = min(self.border_radius, bg_w / 2, bg_h / 2)
-            pdf.rounded_rect(
+            pdf.rect(
                 self.x - self.padding_x,
                 self.y - self.padding_y,
-                bg_w, bg_h, r=r, style='F'
+                bg_w, bg_h,
+                style='F',
+                round_corners=True,
+                corner_radius=r,
             )
         r, g, b = self.color
         pdf.set_text_color(r, g, b)
