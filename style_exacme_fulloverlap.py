@@ -2,13 +2,13 @@
 """
 Exacme 全搭盖样式 - 将原有的 BoxMarkEngine 转换为样式类
 """
+from fpdf import FPDF
 from PIL import Image, ImageDraw, ImageFont
 import pathlib as Path
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
 import layout_engine as engine
 import re
-import general_functions
 
 
 @StyleRegistry.register
@@ -76,6 +76,54 @@ class ExacmeFullOverlapStyle(BoxMarkStyle):
             "flap_btm_side2": "blank",
         }
         
+    # ── fpdf2 required abstract methods (hybrid PIL → PDF) ──────────────────
+
+    def get_layout_config_mm(self, sku_config):
+        """mm-based layout for fpdf2 (mirrors get_layout_config in mm)"""
+        l_mm = sku_config.l_cm * 10
+        w_mm = sku_config.w_cm * 10
+        h_mm = sku_config.h_cm * 10
+
+        x0, x1 = 0.0, l_mm
+        x2, x3 = l_mm + w_mm, 2 * l_mm + w_mm
+        y0, y1, y2 = 0.0, w_mm, w_mm + h_mm
+
+        return {
+            "flap_top_front1": (x0, y0, l_mm, w_mm),
+            "flap_top_side1":  (x1, y0, w_mm, w_mm),
+            "flap_top_front2": (x2, y0, l_mm, w_mm),
+            "flap_top_side2":  (x3, y0, w_mm, w_mm),
+            "panel_front1":    (x0, y1, l_mm, h_mm),
+            "panel_side1":     (x1, y1, w_mm, h_mm),
+            "panel_front2":    (x2, y1, l_mm, h_mm),
+            "panel_side2":     (x3, y1, w_mm, h_mm),
+            "flap_btm_front1": (x0, y2, l_mm, w_mm),
+            "flap_btm_side1":  (x1, y2, w_mm, w_mm),
+            "flap_btm_front2": (x2, y2, l_mm, w_mm),
+            "flap_btm_side2":  (x3, y2, w_mm, w_mm),
+        }
+
+    def register_fonts(self, pdf: FPDF):
+        pass  # hybrid PIL→PDF: panels rendered as raster images, no PDF fonts needed
+
+    def draw_to_pdf(self, pdf: FPDF, sku_config):
+        """Render via PIL panels then embed as raster images in the PDF."""
+        layout_mm  = self.get_layout_config_mm(sku_config)
+        panels_map = self.get_panels_mapping(sku_config)
+        panels     = self.generate_all_panels(sku_config)
+
+        r, g, b = sku_config.background_color
+        pdf.set_fill_color(r, g, b)
+        for _, (x, y, w, h) in layout_mm.items():
+            pdf.rect(x, y, w, h, style='F')
+
+        for region, (x, y, w, h) in layout_mm.items():
+            panel_key = panels_map.get(region)
+            if panel_key and panel_key in panels:
+                img = panels[panel_key]
+                if img is not None:
+                    pdf.image(img, x=x, y=y, w=w, h=h)
+
     def generate_all_panels(self, sku_config):
         """生成 Exacme 全搭盖样式需要的所有面板"""
         

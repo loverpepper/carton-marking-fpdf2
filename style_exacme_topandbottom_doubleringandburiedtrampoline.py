@@ -3,6 +3,7 @@
 """
 
 
+from fpdf import FPDF
 from PIL import Image, ImageDraw, ImageFont
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
@@ -50,6 +51,46 @@ class ExacmeTopAndBottomDoubleRingAndBuriedTrampolineStyle(BoxMarkStyle):
             'left_side_panel': 'short_side_left',
             'right_side_panel': 'short_side_right'
         }
+
+    # ── fpdf2 required abstract methods (hybrid PIL → PDF) ──────────────────
+
+    def get_layout_config_mm(self, sku_config):
+        """mm-based layout for fpdf2 (mirrors get_layout_config in mm)"""
+        l_mm = sku_config.l_cm * 10
+        w_mm = sku_config.w_cm * 10
+        h_mm = sku_config.h_cm * 10
+
+        x0, x1, x2 = 0.0, h_mm, h_mm + l_mm
+        y0, y1, y2 = 0.0, h_mm, h_mm + w_mm
+
+        return {
+            "back_side_panel":  (x1, y0, l_mm, h_mm),
+            "left_side_panel":  (x0, y1, h_mm, w_mm),
+            "top_panel":        (x1, y1, l_mm, w_mm),
+            "right_side_panel": (x2, y1, h_mm, w_mm),
+            "front_side_panel": (x1, y2, l_mm, h_mm),
+        }
+
+    def register_fonts(self, pdf: FPDF):
+        pass  # hybrid PIL→PDF: panels rendered as raster images, no PDF fonts needed
+
+    def draw_to_pdf(self, pdf: FPDF, sku_config):
+        """Render via PIL panels then embed as raster images in the PDF."""
+        layout_mm  = self.get_layout_config_mm(sku_config)
+        panels_map = self.get_panels_mapping(sku_config)
+        panels     = self.generate_all_panels(sku_config)
+
+        r, g, b = sku_config.background_color
+        pdf.set_fill_color(r, g, b)
+        for _, (x, y, w, h) in layout_mm.items():
+            pdf.rect(x, y, w, h, style='F')
+
+        for region, (x, y, w, h) in layout_mm.items():
+            panel_key = panels_map.get(region)
+            if panel_key and panel_key in panels:
+                img = panels[panel_key]
+                if img is not None:
+                    pdf.image(img, x=x, y=y, w=w, h=h)
 
     def generate_all_panels(self, sku_config):
         canvas_main = self.generate_exacme_main_panel(sku_config)

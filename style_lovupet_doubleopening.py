@@ -2,6 +2,7 @@
 """
 Lovupet 对开盖样式 - 将原有的 BoxMarkEngine 转换为样式类
 """
+from fpdf import FPDF
 from PIL import Image, ImageDraw, ImageFont
 import pathlib as Path
 from style_base import BoxMarkStyle, StyleRegistry
@@ -75,6 +76,55 @@ class LovupetDoubleOpeningStyle(BoxMarkStyle):
             "flap_btm_side2": "blank",
         }
         
+    # ── fpdf2 required abstract methods (hybrid PIL → PDF) ──────────────────
+
+    def get_layout_config_mm(self, sku_config):
+        """mm-based layout for fpdf2 (mirrors get_layout_config in mm)"""
+        l_mm = sku_config.l_cm * 10
+        w_mm = sku_config.w_cm * 10
+        h_mm = sku_config.h_cm * 10
+        half_w_mm = w_mm / 2
+
+        x0, x1 = 0.0, l_mm
+        x2, x3 = l_mm + w_mm, 2 * l_mm + w_mm
+        y0, y1, y2 = 0.0, half_w_mm, half_w_mm + h_mm
+
+        return {
+            "flap_top_front1": (x0, y0, l_mm,      half_w_mm),
+            "flap_top_side1":  (x1, y0, w_mm,      half_w_mm),
+            "flap_top_front2": (x2, y0, l_mm,      half_w_mm),
+            "flap_top_side2":  (x3, y0, w_mm,      half_w_mm),
+            "panel_front1":    (x0, y1, l_mm,      h_mm),
+            "panel_side1":     (x1, y1, w_mm,      h_mm),
+            "panel_front2":    (x2, y1, l_mm,      h_mm),
+            "panel_side2":     (x3, y1, w_mm,      h_mm),
+            "flap_btm_front1": (x0, y2, l_mm,      half_w_mm),
+            "flap_btm_side1":  (x1, y2, w_mm,      half_w_mm),
+            "flap_btm_front2": (x2, y2, l_mm,      half_w_mm),
+            "flap_btm_side2":  (x3, y2, w_mm,      half_w_mm),
+        }
+
+    def register_fonts(self, pdf: FPDF):
+        pass  # hybrid PIL→PDF: panels rendered as raster images, no PDF fonts needed
+
+    def draw_to_pdf(self, pdf: FPDF, sku_config):
+        """Render via PIL panels then embed as raster images in the PDF."""
+        layout_mm  = self.get_layout_config_mm(sku_config)
+        panels_map = self.get_panels_mapping(sku_config)
+        panels     = self.generate_all_panels(sku_config)
+
+        r, g, b = sku_config.background_color
+        pdf.set_fill_color(r, g, b)
+        for _, (x, y, w, h) in layout_mm.items():
+            pdf.rect(x, y, w, h, style='F')
+
+        for region, (x, y, w, h) in layout_mm.items():
+            panel_key = panels_map.get(region)
+            if panel_key and panel_key in panels:
+                img = panels[panel_key]
+                if img is not None:
+                    pdf.image(img, x=x, y=y, w=w, h=h)
+
     def generate_all_panels(self, sku_config):
         """生成 Lovupet 对开盖样式需要的所有面板"""
         
@@ -97,24 +147,19 @@ class LovupetDoubleOpeningStyle(BoxMarkStyle):
     
     
     def _load_resources(self):
-        """加载 Lovupet 对开盖样式的图片资源"""
+        """加载 Lovupet 对开盖样式的图片资源（存储 Path，按需打开）"""
         res_base = self.base_dir / 'assets' / 'Lovupet' / '对开盖' / '矢量文件'
-        
         self.resources = {
-            
             # 正唛有网址、logo、猫抓图、宠物图
-            'icon_logo': Image.open(res_base / 'logo.png').convert('RGBA'),
-            'icon_web': Image.open(res_base / '网址框.png').convert('RGBA'),
-            'icon_product': Image.open(res_base / '宠物.png').convert('RGBA'),
-            'icon_catclaw': Image.open(res_base / '猫抓.png').convert('RGBA'),
-            
-            # 侧唛有宠物图、标签框
-            'icon_paste_barcode': Image.open(res_base / '条形码定界框.png').convert('RGBA'),
-            'icon_product': Image.open(res_base / '宠物.png').convert('RGBA'),
-            'icon_side_label': Image.open(res_base / '注意事项.png').convert('RGBA'),
-            
+            'icon_logo':          res_base / 'logo.png',
+            'icon_web':           res_base / '网址框.png',
+            'icon_product':       res_base / '宠物.png',
+            'icon_catclaw':       res_base / '猫抓.png',
+            # 侧唛有标签框 (条形码定界框.png 资源文件暂缺，保留 Path 供将来补充)
+            'icon_paste_barcode': res_base / '条形码定界框.png',
+            'icon_side_label':    res_base / '注意事项.png',
             # 左上盖有一个箱子提示语
-            'icon_box_hint': Image.open(res_base / '箱子提示语.png').convert('RGBA'),
+            'icon_box_hint':      res_base / '箱子提示语.png',
         }
     
     def _load_fonts(self):
@@ -135,7 +180,7 @@ class LovupetDoubleOpeningStyle(BoxMarkStyle):
         canvas_down = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.half_w_px), sku_config.background_color)
         
         # 粘贴箱子提示语
-        hint_img = self.resources['icon_box_hint']
+        hint_img = Image.open(self.resources['icon_box_hint']).convert('RGBA')
         hint_img_target_width = int(canvas_up.width * 0.8)
         
         general_functions.paste_image_center_with_heightorwidth(canvas_up, hint_img, width=hint_img_target_width)
@@ -149,7 +194,7 @@ class LovupetDoubleOpeningStyle(BoxMarkStyle):
 
         ####### 顶部column #########
         # 粘贴 logo
-        logo_img = self.resources['icon_logo']
+        logo_img = Image.open(self.resources['icon_logo']).convert('RGBA')
         logo_img_target_width = int(canvas.width * 0.72)
         
         # 画三个实心圆，然后在上面加入sku_name文本
@@ -171,11 +216,11 @@ class LovupetDoubleOpeningStyle(BoxMarkStyle):
         
         ####### 中部column #########
         # 粘贴宠物图
-        product_img = self.resources['icon_product']
+        product_img = Image.open(self.resources['icon_product']).convert('RGBA')
         product_img_target_width = int(canvas.width * 0.95)
         
         # 粘贴网址框
-        web_img = self.resources['icon_web'] 
+        web_img = Image.open(self.resources['icon_web']).convert('RGBA')
         web_img_target_width = int(canvas.width * 0.78)
         
         middle_col = engine.Column(
@@ -189,7 +234,7 @@ class LovupetDoubleOpeningStyle(BoxMarkStyle):
         
         # ####### 底部column #########
         # 粘贴猫抓图
-        catclaw_img = self.resources['icon_catclaw']
+        catclaw_img = Image.open(self.resources['icon_catclaw']).convert('RGBA')
         catclaw_img_target_width = int(canvas.width * 0.5)
         
         # 计算黑色矩形框的实际像素高度 (精准 10cm)
@@ -247,7 +292,7 @@ class LovupetDoubleOpeningStyle(BoxMarkStyle):
         draw = ImageDraw.Draw(canvas)
         
         # === 1. 右上角：条形码定界框 ===
-        icon_barcode = self.resources['icon_paste_barcode'].rotate(90, expand=True) # 旋转90度适应侧唛竖向布局
+        icon_barcode = Image.open(self.resources['icon_paste_barcode']).convert('RGBA').rotate(90, expand=True) # 旋转90度适应侧唛竖向布局
         barcode_height = int(sku_config.dpi * 5) # 条形码高度固定为5cm
         
         # 用 Row 容器，左边用 Spacer 撑开，实现绝对靠右排版
@@ -262,11 +307,11 @@ class LovupetDoubleOpeningStyle(BoxMarkStyle):
         )
         
         # === 2. 中部：Lovupet Logo ===
-        icon_logo = self.resources['icon_logo']
+        icon_logo = Image.open(self.resources['icon_logo']).convert('RGBA')
         logo_width = int(canvas.width * 0.71)
         
         # === 3. 下部：包含动态数据的标签框 ===
-        icon_label = self.resources['icon_side_label']
+        icon_label = Image.open(self.resources['icon_side_label']).convert('RGBA')
         label_width = int(canvas.width * 0.92)
         label_height = int(icon_label.height * (label_width / icon_label.width))
         icon_label_resized = icon_label.resize((label_width, label_height), Image.Resampling.LANCZOS)
