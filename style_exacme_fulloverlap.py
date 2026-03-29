@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Exacme 全搭盖样式 - 将原有的 BoxMarkEngine 转换为样式类
+Exacme 全搭盖样式 - fpdf2 版
 """
 from fpdf import FPDF
 from PIL import Image, ImageDraw, ImageFont
 import pathlib as Path
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
+from general_functions import generate_barcode_image
 import layout_engine as engine
 import re
 
@@ -76,7 +77,7 @@ class ExacmeFullOverlapStyle(BoxMarkStyle):
             "flap_btm_side2": "blank",
         }
         
-    # ── fpdf2 required abstract methods (hybrid PIL → PDF) ──────────────────
+    # ── fpdf2 required abstract methods ─────────────────────────────────────
 
     def get_layout_config_mm(self, sku_config):
         """mm-based layout for fpdf2 (mirrors get_layout_config in mm)"""
@@ -103,26 +104,289 @@ class ExacmeFullOverlapStyle(BoxMarkStyle):
             "flap_btm_side2":  (x3, y2, w_mm, w_mm),
         }
 
+    # ── fpdf2 字体注册 ──────────────────────────────────────────────────────────
+
     def register_fonts(self, pdf: FPDF):
-        pass  # hybrid PIL→PDF: panels rendered as raster images, no PDF fonts needed
+        """向 FPDF 对象注册本样式使用的所有字体"""
+        pdf.add_font('Arial',      '',  self.font_paths['Arial Regular'])
+        pdf.add_font('Arial',      'B', self.font_paths['Arial Bold'])
+        pdf.add_font('ArialBlack', '',   self.font_paths['Arial Black'])
+
+    # ── 核心绘制入口 ────────────────────────────────────────────────────────────
 
     def draw_to_pdf(self, pdf: FPDF, sku_config):
-        """Render via PIL panels then embed as raster images in the PDF."""
-        layout_mm  = self.get_layout_config_mm(sku_config)
-        panels_map = self.get_panels_mapping(sku_config)
-        panels     = self.generate_all_panels(sku_config)
+        """将所有面板直接绘制到已添加页面的 FPDF 对象上"""
+        layout = self.get_layout_config_mm(sku_config)
 
+        # 填充各面板背景色
         r, g, b = sku_config.background_color
         pdf.set_fill_color(r, g, b)
-        for _, (x, y, w, h) in layout_mm.items():
+        for _, (x, y, w, h) in layout.items():
             pdf.rect(x, y, w, h, style='F')
 
-        for region, (x, y, w, h) in layout_mm.items():
-            panel_key = panels_map.get(region)
-            if panel_key and panel_key in panels:
-                img = panels[panel_key]
-                if img is not None:
-                    pdf.image(img, x=x, y=y, w=w, h=h)
+        l_mm = sku_config.l_cm * 10
+        w_mm = sku_config.w_cm * 10
+        h_mm = sku_config.h_cm * 10
+
+        x0 = 0.0
+        x1 = l_mm
+        x2 = l_mm + w_mm
+        x3 = 2 * l_mm + w_mm
+        y1 = w_mm
+        y2 = w_mm + h_mm
+
+        # 两块正面面板
+        self._draw_front_panel(pdf, sku_config, x0, y1, l_mm, h_mm)
+        self._draw_front_panel(pdf, sku_config, x2, y1, l_mm, h_mm)
+
+        # 两块侧面面板（保留为 PIL 光栅图，因模板背景复杂）
+        side_img = self._build_side_panel_image(sku_config)
+        pdf.image(side_img, x=x1, y=y1, w=w_mm, h=h_mm)
+        pdf.image(side_img, x=x3, y=y1, w=w_mm, h=h_mm)
+
+        # 翻盖面板：left_up（正常）、left_down（空白）、right_up（空白）、right_down（180° 旋转）
+        self._draw_flap_left_up(pdf, sku_config, x0, 0.0, l_mm, w_mm)
+        self._draw_flap_right_down(pdf, sku_config, x2, y2, l_mm, w_mm)
+        # left_down / right_up / side flaps 均为空白（已由背景色填充）
+
+    # ── 内部辅助方法 ────────────────────────────────────────────────────────────
+
+    def _get_font_size(self, text, font_key, target_width_mm, ppi):
+        """返回 (font_size_pt, pil_font) 使文字适合 target_width_mm"""
+        target_px = int(target_width_mm * ppi / 25.4)
+        size_px = general_functions.get_max_font_size(text, self.font_paths[font_key], target_px)
+        size_pt = size_px * 72.0 / ppi
+        pil_font = ImageFont.truetype(self.font_paths[font_key], size_px)
+        return size_pt, pil_font
+
+    def _get_font_size_constrained(self, text, font_key, target_width_mm, max_height_mm, ppi):
+        """同 _get_font_size，额外受 max_height_mm 约束"""
+        target_px = int(target_width_mm * ppi / 25.4)
+        max_h_px = int(max_height_mm * ppi / 25.4)
+        size_px = general_functions.get_max_font_size(
+            text, self.font_paths[font_key], target_px, max_height=max_h_px)
+        size_pt = size_px * 72.0 / ppi
+        pil_font = ImageFont.truetype(self.font_paths[font_key], size_px)
+        return size_pt, pil_font
+
+    @staticmethod
+    def _pil_bbox_mm(pil_font, text, ppi):
+        """使用 anchor='ls' 获取文字边框并换算为 mm"""
+        left, top, right, bottom = pil_font.getbbox(text, anchor='ls')
+        px_per_mm = ppi / 25.4
+        return left / px_per_mm, top / px_per_mm, right / px_per_mm, bottom / px_per_mm
+
+    def _draw_text_top_left(self, pdf, x_mm, y_top_mm, text,
+                             font_family, font_style, font_size_pt, pil_font, ppi,
+                             color=(0, 0, 0)):
+        """以左-顶锚点绘制文字"""
+        _, top_mm, _, _ = self._pil_bbox_mm(pil_font, text, ppi)
+        baseline_y = y_top_mm + (-top_mm)
+        r, g, b = color
+        pdf.set_text_color(r, g, b)
+        pdf.set_font(font_family, font_style, font_size_pt)
+        pdf.text(x_mm, baseline_y, text)
+
+    def _draw_text_top_center(self, pdf, x_center_mm, y_top_mm, text,
+                               font_family, font_style, font_size_pt, pil_font, ppi,
+                               color=(0, 0, 0)):
+        """以中-顶锚点绘制文字"""
+        left_mm, top_mm, right_mm, _ = self._pil_bbox_mm(pil_font, text, ppi)
+        text_w_mm = right_mm - left_mm
+        x_mm = x_center_mm - text_w_mm / 2.0
+        baseline_y = y_top_mm + (-top_mm)
+        r, g, b = color
+        pdf.set_text_color(r, g, b)
+        pdf.set_font(font_family, font_style, font_size_pt)
+        pdf.text(x_mm, baseline_y, text)
+
+    # ── 正面面板 ─────────────────────────────────────────────────────────────
+
+    def _draw_front_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
+        """绘制正面（正唛）面板 - 矢量文字 + 光栅图标"""
+        ppi = sku_config.ppi
+        px_per_mm = ppi / 25.4
+        margin_mm = 20.0  # 2cm 安全边距
+
+        # ── 1. 提取尺寸编号 ─────────────────────────────────────────────────
+        match = re.search(r'S(\d{2})', sku_config.sku_name)
+        if match:
+            product_size_number = match.group(1)
+        else:
+            raise ValueError("SKU 名称格式不正确，无法提取尺寸信息")
+
+        # ── 2. 顶部行：左侧 "XXFT" + 右侧颜色文字 ─────────────────────────
+        ft_text = f"{product_size_number}FT"
+        ft_size_px = int(h_mm * px_per_mm * 0.12)
+        ft_size_pt = ft_size_px * 72.0 / ppi
+        pil_ft = ImageFont.truetype(self.font_paths['Arial Black'], ft_size_px)
+
+        color_text = str(sku_config.color)
+        color_size_px = int(h_mm * px_per_mm * 0.08)
+        color_size_pt = color_size_px * 72.0 / ppi
+        pil_color = ImageFont.truetype(self.font_paths['Arial Bold'], color_size_px)
+
+        # 左侧 FT 文字
+        ft_x = x_mm + margin_mm
+        _, ft_top, _, ft_bot = self._pil_bbox_mm(pil_ft, ft_text, ppi)
+        ft_h_mm = ft_bot - ft_top
+        ft_y_top = y_mm + margin_mm
+        self._draw_text_top_left(pdf, ft_x, ft_y_top, ft_text,
+                                  'ArialBlack', '', ft_size_pt, pil_ft, ppi)
+
+        # 右侧颜色文字（与 FT 垂直居中对齐）
+        _, c_top, _, c_bot = self._pil_bbox_mm(pil_color, color_text, ppi)
+        c_h_mm = c_bot - c_top
+        cl, _, cr, _ = self._pil_bbox_mm(pil_color, color_text, ppi)
+        color_w_mm = cr - cl
+        color_x = x_mm + w_mm - margin_mm - color_w_mm
+        color_y_top = ft_y_top + (ft_h_mm - c_h_mm) / 2.0
+        self._draw_text_top_left(pdf, color_x, color_y_top, color_text,
+                                  'Arial', 'B', color_size_pt, pil_color, ppi)
+
+        # ── 3. 中间：公司 logo + 产品名称图标 ─────────────────────────────────
+        icon_logo_product = self.resources['icon_logo_product']
+        orig_w, orig_h = icon_logo_product.size
+        logo_w_mm = w_mm * 0.37
+        logo_h_mm = logo_w_mm * orig_h / orig_w
+        logo_x = x_mm + (w_mm - logo_w_mm) / 2.0
+        logo_y = y_mm + (h_mm - logo_h_mm) / 2.0
+        pdf.image(icon_logo_product, x=logo_x, y=logo_y, w=logo_w_mm, h=logo_h_mm)
+
+        # ── 4. 底部行：左侧公司信息 + 右侧 SKU 黑框 ──────────────────────────
+        icon_company = self.resources['icon_company']
+        ic_orig_w, ic_orig_h = icon_company.size
+        ic_w_mm = w_mm * 0.19
+        ic_h_mm = ic_w_mm * ic_orig_h / ic_orig_w
+        ic_x = x_mm + margin_mm
+        ic_y = y_mm + h_mm - margin_mm - ic_h_mm
+        pdf.image(icon_company, x=ic_x, y=ic_y, w=ic_w_mm, h=ic_h_mm)
+
+        # SKU 黑框 + 白字
+        sku_text = sku_config.sku_name
+        sku_size_px = int(h_mm * px_per_mm * 0.14)
+        sku_size_pt = sku_size_px * 72.0 / ppi
+        pil_sku = ImageFont.truetype(self.font_paths['Arial Bold'], sku_size_px)
+        sl, st, sr, sb = self._pil_bbox_mm(pil_sku, sku_text, ppi)
+        sku_w_mm = sr - sl
+        sku_h_mm = sb - st
+
+        pad_mm = 10.0 * h_mm / (sku_config.h_cm * 10)  # ~1cm 内边距，比例缩放
+        radius_mm = h_mm * 0.05
+
+        # 黑色圆角矩形背景
+        box_total_w = sku_w_mm + 2 * pad_mm
+        box_total_h = sku_h_mm + 2 * pad_mm
+        box_x = x_mm + w_mm - margin_mm - box_total_w
+        box_y = y_mm + h_mm - margin_mm - box_total_h
+
+        pdf.set_fill_color(0, 0, 0)
+        r_corner = min(radius_mm, box_total_w / 2, box_total_h / 2)
+        pdf.rect(box_x, box_y, box_total_w, box_total_h,
+                 style='F', round_corners=True, corner_radius=r_corner)
+
+        # SKU 白字
+        sku_text_x = box_x + pad_mm
+        sku_text_y = box_y + pad_mm
+        r, g, b = sku_config.background_color
+        self._draw_text_top_left(pdf, sku_text_x, sku_text_y, sku_text,
+                                  'Arial', 'B', sku_size_pt, pil_sku, ppi,
+                                  color=(r, g, b))
+
+    # ── 侧面面板（PIL 光栅保留） ─────────────────────────────────────────────
+
+    def _build_side_panel_image(self, sku_config):
+        """构建侧面面板 PIL 图像（保留光栅渲染，因模板背景复杂）并返回旋转后的 PIL Image"""
+        return self.generate_exacme_side_panel(sku_config)
+
+    # ── 翻盖面板 ─────────────────────────────────────────────────────────────
+
+    def _draw_flap_left_up(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
+        """绘制左翻盖（上）面板 - 矢量文字 + 光栅图标"""
+        ppi = sku_config.ppi
+        px_per_mm = ppi / 25.4
+        margin_mm = 20.0  # 2cm 安全边距
+
+        # ── 提取尺寸编号 ────────────────────────────────────────────────────
+        match = re.search(r'S(\d{2})', sku_config.sku_name)
+        if match:
+            product_size_number = match.group(1)
+        else:
+            raise ValueError("SKU 名称格式不正确，无法提取尺寸信息")
+
+        # ── 顶部行：左侧 logo + 右侧 "XXFT" ─────────────────────────────
+        icon_top_logo = self.resources['icon_top_logo']
+        orig_w, orig_h = icon_top_logo.size
+        logo_w_mm = w_mm * 0.15
+        logo_h_mm = logo_w_mm * orig_h / orig_w
+        logo_x = x_mm + margin_mm
+        logo_y = y_mm + margin_mm
+        pdf.image(icon_top_logo, x=logo_x, y=logo_y, w=logo_w_mm, h=logo_h_mm)
+
+        ft_text = f"{product_size_number}FT"
+        ft_size_px = int(h_mm * px_per_mm * 0.22)
+        ft_size_pt = ft_size_px * 72.0 / ppi
+        pil_ft = ImageFont.truetype(self.font_paths['Arial Black'], ft_size_px)
+        fl, ft_top, fr, ft_bot = self._pil_bbox_mm(pil_ft, ft_text, ppi)
+        ft_w_mm = fr - fl
+        ft_h_mm = ft_bot - ft_top
+        ft_x = x_mm + w_mm - margin_mm - ft_w_mm
+        # 与 logo 底部对齐
+        ft_y_top = logo_y + logo_h_mm - ft_h_mm
+        self._draw_text_top_left(pdf, ft_x, ft_y_top, ft_text,
+                                  'ArialBlack', '', ft_size_pt, pil_ft, ppi)
+
+        # ── 中间：SKU 名称 ──────────────────────────────────────────────────
+        sku_text = sku_config.sku_name
+        sku_pt, pil_sku = self._get_font_size_constrained(
+            sku_text, 'Arial Bold', w_mm * 0.50, h_mm * 0.30, ppi)
+        skl, skt, skr, skb = self._pil_bbox_mm(pil_sku, sku_text, ppi)
+        sku_w_mm = skr - skl
+        sku_h_mm = skb - skt
+        sku_x = x_mm + (w_mm - sku_w_mm) / 2.0
+        nudge_y_mm = h_mm * (-0.08)
+        sku_y_top = y_mm + (h_mm - sku_h_mm) / 2.0 + nudge_y_mm
+        self._draw_text_top_left(pdf, sku_x, sku_y_top, sku_text,
+                                  'Arial', 'B', sku_pt, pil_sku, ppi)
+
+        # ── 底部行：三个图标 ────────────────────────────────────────────────
+        icon_notice = self.resources['icon_top_notice']
+        icon_attention = self.resources['icon_top_attention']
+        icon_smallicons = self.resources['icon_top_smallicons']
+
+        btm_y_base = y_mm + h_mm - margin_mm
+
+        # icon_top_notice（左，22% 宽）
+        n_orig_w, n_orig_h = icon_notice.size
+        n_w_mm = w_mm * 0.22
+        n_h_mm = n_w_mm * n_orig_h / n_orig_w
+        n_x = x_mm + margin_mm
+        n_y = btm_y_base - n_h_mm
+        pdf.image(icon_notice, x=n_x, y=n_y, w=n_w_mm, h=n_h_mm)
+
+        # icon_top_smallicons（右，12% 宽）
+        s_orig_w, s_orig_h = icon_smallicons.size
+        s_w_mm = w_mm * 0.12
+        s_h_mm = s_w_mm * s_orig_h / s_orig_w
+        s_x = x_mm + w_mm - margin_mm - s_w_mm
+        s_y = btm_y_base - s_h_mm
+        pdf.image(icon_smallicons, x=s_x, y=s_y, w=s_w_mm, h=s_h_mm)
+
+        # icon_top_attention（中，35% 宽，向左偏移 5%）
+        a_orig_w, a_orig_h = icon_attention.size
+        a_w_mm = w_mm * 0.35
+        a_h_mm = a_w_mm * a_orig_h / a_orig_w
+        a_x = x_mm + (w_mm - a_w_mm) / 2.0 - w_mm * 0.05
+        a_y = btm_y_base - a_h_mm
+        pdf.image(icon_attention, x=a_x, y=a_y, w=a_w_mm, h=a_h_mm)
+
+    def _draw_flap_right_down(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
+        """绘制右翻盖（下）面板 - left_up 旋转 180°。
+        使用 pdf.rotation() 实现矢量文字 180° 旋转。"""
+        cx = x_mm + w_mm / 2.0
+        cy = y_mm + h_mm / 2.0
+        with pdf.rotation(180, cx, cy):
+            self._draw_flap_left_up(pdf, sku_config, x_mm, y_mm, w_mm, h_mm)
 
     def generate_all_panels(self, sku_config):
         """生成 Exacme 全搭盖样式需要的所有面板"""
