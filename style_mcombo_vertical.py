@@ -1,439 +1,650 @@
 # -*- coding: utf-8 -*-
 """
-MCombo 标准样式 - 将原有的 BoxMarkEngine 转换为样式类
+MCombo 第二箱三箱样式 - fpdf2 版
 """
-from PIL import Image, ImageDraw, ImageFont
-import pathlib as Path
+from fpdf import FPDF
+from PIL import Image, ImageFont
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
+from general_functions import generate_barcode_image
 
 
 @StyleRegistry.register
-class MComboStandardStyle(BoxMarkStyle):
-    """MCombo 标准箱唛样式（原始样式）"""
+class MComboVerticalStyle(BoxMarkStyle):
+    """MCombo 第二箱三箱箱唛样式 (fpdf2 版)"""
 
     def get_style_name(self):
         return "mcombo_vertical"
 
     def get_style_description(self):
-        return "MCombo 第二箱三箱 箱唛样式 "
+        return "MCombo 第二箱三箱 箱唛样式"
 
     def get_required_params(self):
-        return ['length_cm', 'width_cm', 'height_cm', 'color', 'product', 'size', 'side_text', 'sku_name', 'box_number',
-                'sponge_verified']
+        return ['length_cm', 'width_cm', 'height_cm', 'color', 'product',
+                'size', 'side_text', 'sku_name', 'box_number', 'sponge_verified']
 
-    def get_layout_config(self, sku_config):
-        """MCombo 标准样式 - 12块布局（4列3行）"""
-        # 1. 定义 X 轴的关键节点 (横向逻辑在两种模式下通常保持一致)
-        x0 = 0
-        x1 = sku_config.l_px
-        x2 = sku_config.w_px + sku_config.l_px
-        x3 = sku_config.w_px + sku_config.l_px * 2
+    def get_layout_config_mm(self, sku_config):
+        """MCombo 第二三箱样式 - 12块布局（4列3行），单位 mm。
+        与标准样式的区别：flap_top_front1 和 flap_btm_front2 高度为 w_mm（完整宽度）。"""
+        l_mm = sku_config.l_cm * 10
+        w_mm = sku_config.w_cm * 10
+        h_mm = sku_config.h_cm * 10
+        half_w_mm = w_mm / 2
 
-        # 2. 根据开关判断布局逻辑
-        # --- 【立起来模式】坐标逻辑 ---
-        # Y轴节点
-        y0 = 0  # 顶盖顶部
-        y1 = sku_config.half_w_px  # 部分顶盖的起始点
-        y2 = sku_config.w_px  # 正身顶部 (大图占用了 w_px)
-        y3 = sku_config.w_px + sku_config.h_px  # 底盖顶部
+        x0 = 0.0
+        x1 = l_mm
+        x2 = l_mm + w_mm
+        x3 = 2 * l_mm + w_mm
 
-        # 返回立起来的字典结构
+        # y1 使用完整 w_mm（大盖子占满整个宽度），而非 half_w_mm
+        y0 = 0.0
+        y1 = w_mm
+        y2 = w_mm + h_mm
+
         return {
-            # 第一行：顶盖层
-            "flap_top_front1": (x0, y0, sku_config.l_px, sku_config.w_px),  # 大图盖子
-            "flap_top_side1": (x1, y1, sku_config.w_px, sku_config.half_w_px),
-            "flap_top_front2": (x2, y1, sku_config.l_px, sku_config.half_w_px),
-            "flap_top_side2": (x3, y1, sku_config.w_px, sku_config.half_w_px),
-
-            # 第二行：正身层
-            "panel_front1": (x0, y2, sku_config.l_px, sku_config.h_px),
-            "panel_side1": (x1, y2, sku_config.w_px, sku_config.h_px),
-            "panel_front2": (x2, y2, sku_config.l_px, sku_config.h_px),
-            "panel_side2": (x3, y2, sku_config.w_px, sku_config.h_px),
-
-            # 第三行：底盖层
-            "flap_btm_front1": (x0, y3, sku_config.l_px, sku_config.half_w_px),
-            "flap_btm_side1": (x1, y3, sku_config.w_px, sku_config.half_w_px),
-            "flap_btm_front2": (x2, y3, sku_config.l_px, sku_config.w_px),  # 大图盖子
-            "flap_btm_side2": (x3, y3, sku_config.w_px, sku_config.half_w_px),
+            # 第一行：顶盖层 (Top Flaps)
+            # flap_top_front1 是大盖子，高度为 w_mm（完整宽度）
+            "flap_top_front1": (x0, y0,          l_mm, w_mm),
+            "flap_top_side1":  (x1, half_w_mm,   w_mm, half_w_mm),
+            "flap_top_front2": (x2, half_w_mm,   l_mm, half_w_mm),
+            "flap_top_side2":  (x3, half_w_mm,   w_mm, half_w_mm),
+            # 第二行：正身层 (Main Body)
+            "panel_front1":    (x0, y1, l_mm, h_mm),
+            "panel_side1":     (x1, y1, w_mm, h_mm),
+            "panel_front2":    (x2, y1, l_mm, h_mm),
+            "panel_side2":     (x3, y1, w_mm, h_mm),
+            # 第三行：底盖层 (Bottom Flaps)
+            "flap_btm_front1": (x0, y2, l_mm, half_w_mm),
+            "flap_btm_side1":  (x1, y2, w_mm, half_w_mm),
+            # flap_btm_front2 是大盖子，高度为 w_mm（完整宽度）
+            "flap_btm_front2": (x2, y2, l_mm, w_mm),
+            "flap_btm_side2":  (x3, y2, w_mm, half_w_mm),
         }
 
     def get_panels_mapping(self, sku_config):
-        """定义每个区域应该粘贴哪个面板"""
         return {
             "flap_top_front1": "left_up",
+            "flap_top_side1":  "blank",
             "flap_top_front2": "right_up",
-            "panel_front1": "front",
-            "panel_side1": "side",
-            "panel_front2": "front",
-            "panel_side2": "side",
+            "flap_top_side2":  "blank",
+            "panel_front1":    "front",
+            "panel_side1":     "side",
+            "panel_front2":    "front",
+            "panel_side2":     "side",
             "flap_btm_front1": "left_down",
+            "flap_btm_side1":  "blank",
             "flap_btm_front2": "right_down",
-            "flap_top_side1": "side_up",
-            "flap_top_side2": "side_up",
-            "flap_btm_side1": "side_down",
-            "flap_btm_side2": "side_down",
+            "flap_btm_side2":  "blank",
         }
 
-    def generate_all_panels(self, sku_config):
-        """生成 MCombo 标准样式需要的所有面板"""
-        canvas_left_up, canvas_left_down = self.generate_left_panel(sku_config)
-        canvas_right_up, canvas_right_down = self.generate_right_panel(sku_config)
-        canvas_front = self.generate_front_panel(sku_config)
-        canvas_side = self.generate_side_panel(sku_config)
-        canvas_side_up, canvas_side_down = self.generate_side_up_down_panel(sku_config)
+    def get_preview_images(self):
+        preview_dir = self.base_dir / 'assets' / 'Mcombo' / '样式一' / '实例生成图'
+        if not preview_dir.exists():
+            return []
+        supported_exts = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff'}
+        results = []
+        for img_path in sorted(preview_dir.iterdir()):
+            if img_path.suffix.lower() in supported_exts:
+                try:
+                    img = Image.open(img_path).convert('RGB')
+                    results.append((img_path.name, img))
+                except Exception:
+                    pass
+        return results
 
-        return {
-            "left_up": canvas_left_up,
-            "left_down": canvas_left_down,
-            "right_up": canvas_right_up,
-            "right_down": canvas_right_down,
-            "front": canvas_front,
-            "side": canvas_side,
-            "side_up": canvas_side_up,
-            "side_down": canvas_side_down
-        }
+    # ── 资源 / 字体加载 ─────────────────────────────────────────────────────────
 
     def _load_resources(self):
-        """加载 MCombo 标准样式的图片资源"""
+        """加载 MCombo 第二三箱样式的图片资源（与标准样式相同）"""
         res_base = self.base_dir / 'assets' / 'Mcombo' / '样式一' / '矢量文件'
         self.resources = {
-            'icon_left_2_panel': Image.open(res_base / '顶部-左-2箱.png').convert('RGBA'),
-            'icon_left_3_panel': Image.open(res_base / '顶部-左-3箱.png').convert('RGBA'),
+            # 翻盖图标需要 PIL 旋转，保留为 PIL Image
+            'icon_left_2_panel':    Image.open(res_base / '顶部-左-2箱.png').convert('RGBA'),
+            'icon_left_3_panel':    Image.open(res_base / '顶部-左-3箱.png').convert('RGBA'),
             'icon_right_2-1_panel': Image.open(res_base / '顶部-右-2-1.png').convert('RGBA'),
             'icon_right_2-2_panel': Image.open(res_base / '顶部-右-2-2.png').convert('RGBA'),
             'icon_right_3-1_panel': Image.open(res_base / '顶部-右-3-1.png').convert('RGBA'),
             'icon_right_3-2_panel': Image.open(res_base / '顶部-右-3-2.png').convert('RGBA'),
             'icon_right_3-3_panel': Image.open(res_base / '顶部-右-3-3.png').convert('RGBA'),
-            # 'icon_top_box_number_2_2': Image.open(res_base / '顶部-box-2-2.png').convert('RGBA'),
-            'icon_top_box_number_3_2': Image.open(res_base / '顶部-box-3-2.png').convert('RGBA'),
-            'icon_top_box_number_3_3': Image.open(res_base / '顶部-box-3-3.png').convert('RGBA'),
-            'icon_trademark': Image.open(res_base / '正唛logo.png').convert('RGBA'),
-            'icon_company': Image.open(res_base / '正唛公司信息.png').convert('RGBA'),
-            'icon_box_number_1': Image.open(res_base / '正唛 Box 1.png').convert('RGBA'),
-            'icon_box_number_2': Image.open(res_base / '正唛 Box 2.png').convert('RGBA'),
-            'icon_box_number_3': Image.open(res_base / '正唛 Box 3.png').convert('RGBA'),
-            'icon_side_label_box': Image.open(res_base / '侧唛标签框.png').convert('RGBA'),
-            'icon_side_logo': Image.open(res_base / '侧唛logo.png').convert('RGBA'),
-            'icon_side_text_box': Image.open(res_base / '侧唛文本框.png').convert('RGBA'),
-            'icon_side_sponge': Image.open(res_base / '海绵认证.png').convert('RGBA')
+            # 静态图标存储为路径，fpdf2 直接接受路径，无需 PIL 预加载
+            'icon_trademark':       res_base / '正唛logo.png',
+            'icon_company':         res_base / '正唛公司信息.png',
+            'icon_box_number_1':    res_base / '正唛 Box 1.png',
+            'icon_box_number_2':    res_base / '正唛 Box 2.png',
+            'icon_box_number_3':    res_base / '正唛 Box 3.png',
+            'icon_side_label_box':  res_base / '侧唛标签框.png',
+            'icon_side_logo':       res_base / '侧唛logo.png',
+            'icon_side_text_box':   res_base / '侧唛文本框.png',
+            # 海绵认证图需要颜色处理，保留为 PIL Image
+            'icon_side_sponge':     general_functions.make_it_pure_black(
+                                        Image.open(res_base / '海绵认证.png').convert('RGBA')),
         }
 
     def _load_fonts(self):
-        """加载字体路径"""
         font_base = self.base_dir / 'assets' / 'Mcombo' / '样式一' / '箱唛字体'
         self.font_paths = {
-            'calibri_bold': str(font_base / 'calibri_blod.ttf'),
-            'itc_demi': str(font_base / 'ITC Avant Garde Gothic LT Demi.ttf'),
-            'courier': str(font_base / 'cour.ttf'),
-            'side_font_label': str(font_base / 'ITC Avant Garde Gothic LT Demi.ttf'),
-            'side_font_bold': str(font_base / 'calibri_blod.ttf'),
-            'side_font_barcode': str(font_base / 'calibri_blod.ttf')
+            'Arial Bold': str(font_base / 'calibri-bold.ttf'),
+            'Arial':      str(font_base / 'avantgardelt-demi.ttf'),
         }
 
-        # 字体大小相对比例
-        self.font_ratios = {
-            'color_font': 51 / 1332,
-            'product_font': 180 / 1332,
-            'size_font': 60 / 1332,
-            'regular_font': 40 / 1332,
-            'side_font': 40 / 1332
-        }
+    # ── fpdf2 字体注册 ──────────────────────────────────────────────────────────
 
-    def _get_fonts(self, sku_config):
-        """根据箱子尺寸动态计算字体大小"""
-        height_px = sku_config.h_px
+    def register_fonts(self, pdf: FPDF):
+        pdf.add_font('Calibri-Bold',      '', self.font_paths['Arial Bold'])
+        pdf.add_font('AvantGardeLT-Demi', '', self.font_paths['Arial'])
 
-        fonts = {
-            'color_font': ImageFont.truetype(
-                self.font_paths['calibri_bold'],
-                size=int(height_px * self.font_ratios['color_font'])
-            ),
-            'product_font': ImageFont.truetype(
-                self.font_paths['itc_demi'],
-                size=int(height_px * self.font_ratios['product_font'])
-            ),
-            'size_font': ImageFont.truetype(
-                self.font_paths['calibri_bold'],
-                size=int(height_px * self.font_ratios['size_font'])
-            ),
-            'regular_font': ImageFont.truetype(
-                self.font_paths['itc_demi'],
-                size=int(height_px * self.font_ratios['regular_font'])
-            )
-        }
-        return fonts
+    # ── 核心绘制入口 ────────────────────────────────────────────────────────────
 
-    def generate_left_panel(self, sku_config):
-        """生成左侧面板"""
-        canvas_left_up = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.w_px),
-                                   sku_config.background_color)
-        canvas_left_down = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.half_w_px),
-                                     sku_config.background_color)
+    def draw_to_pdf(self, pdf: FPDF, sku_config):
+        """将所有面板直接绘制到已添加页面的 FPDF 对象上"""
+        layout = self.get_layout_config_mm(sku_config)
 
-        total_box_number = sku_config.box_number['total_boxes']
-        current_box_number = sku_config.box_number['current_box']
-        icon_left_panel = self.resources[f'icon_top_box_number_{total_box_number}_{current_box_number}']
+        r, g, b = sku_config.background_color
+        pdf.set_fill_color(r, g, b)
+        for _, (x, y, w, h) in layout.items():
+            pdf.rect(x, y, w, h, style='F')
 
-        icon_left_up_panel = icon_left_panel
-        # icon_left_down_panel = icon_left_panel.rotate(180, expand=True)
+        l_mm = sku_config.l_cm * 10
+        w_mm = sku_config.w_cm * 10
+        h_mm = sku_config.h_cm * 10
+        half_w_mm = w_mm / 2
 
-        # 计算图标的目标高度（厘米）
-        target_height_cm = 18  # 默认高度18cm
-        max_width_cm = sku_config.l_px * 0.8 / sku_config.dpi  # 面板长度的85%转换为cm
-        
-        # 获取原始尺寸（像素），计算按高度18cm缩放后的宽度（厘米）
-        icon_w_px, icon_h_px = icon_left_panel.size
-        scaled_width_cm = icon_w_px / icon_h_px * target_height_cm  # 宽高比 × 目标高度
-        print(f"左侧面板原始宽度: {scaled_width_cm:.2f}cm ")
-        # 如果按18cm高度缩放后，宽度超过面板长度的85%，则改用宽度限制
-        if scaled_width_cm > max_width_cm:
-            canvas_left_up = general_functions.paste_center_with_width(
-                canvas_left_up, icon_left_up_panel, width_cm=max_width_cm, dpi=sku_config.dpi)
+        x0 = 0.0
+        x1 = l_mm
+        x2 = l_mm + w_mm
+        x3 = 2 * l_mm + w_mm
+
+        y1 = w_mm
+        y2 = w_mm + h_mm
+
+        # 两块正面面板
+        self._draw_front_panel(pdf, sku_config, x0, y1, l_mm, h_mm)
+        self._draw_front_panel(pdf, sku_config, x2, y1, l_mm, h_mm)
+
+        # 两块侧面面板
+        self._draw_side_panel(pdf, sku_config, x1, y1, w_mm, h_mm)
+        self._draw_side_panel(pdf, sku_config, x3, y1, w_mm, h_mm)
+
+        # 翻盖面板
+        # flap_top_front1（大盖子，高 w_mm）：left_up，不旋转
+        self._draw_flap_left(pdf, sku_config, x0, 0.0, l_mm, w_mm, rotate_180=False)
+        # flap_btm_front1（小盖子，高 half_w_mm）：left_down，旋转 180°
+        self._draw_flap_left(pdf, sku_config, x0, y2, l_mm, half_w_mm, rotate_180=True)
+        # flap_top_front2（小盖子，高 half_w_mm）：right_up，旋转 180°
+        self._draw_flap_right(pdf, sku_config, x2, half_w_mm, l_mm, half_w_mm, rotate_180=True)
+        # flap_btm_front2（大盖子，高 w_mm）：right_down，不旋转
+        self._draw_flap_right(pdf, sku_config, x2, y2, l_mm, w_mm, rotate_180=False)
+
+    # ── 内部辅助方法（与 mcombo_standard 相同）──────────────────────────────────
+
+    def _get_font_size(self, text, font_key, target_width_mm, ppi):
+        """根据目标宽度（mm）计算字号，返回 (font_size_pt, pil_font)"""
+        target_px = int(target_width_mm * ppi / 25.4)
+        size_px = general_functions.get_max_font_size(text, self.font_paths[font_key], target_px)
+        size_pt = size_px * 72.0 / ppi
+        pil_font = ImageFont.truetype(self.font_paths[font_key], size_px)
+        return size_pt, pil_font
+
+    @staticmethod
+    def _pil_bbox_mm(pil_font, text, ppi):
+        """使用 anchor='ls' 获取文字边框并换算为 mm。
+        top 为负值（基线以上），bottom 为正值（基线以下）。"""
+        left, top, right, bottom = pil_font.getbbox(text, anchor='ls')
+        px_per_mm = ppi / 25.4
+        return left / px_per_mm, top / px_per_mm, right / px_per_mm, bottom / px_per_mm
+
+    def _draw_text_top_left(self, pdf, x_mm, y_top_mm, text,
+                             font_family, font_style, font_size_pt, pil_font, ppi,
+                             color=(0, 0, 0)):
+        """以左-顶锚点绘制文字（等价于 PIL anchor='la'，y 对齐文字视觉顶端）"""
+        _, top_mm, _, _ = self._pil_bbox_mm(pil_font, text, ppi)
+        baseline_y = y_top_mm + (-top_mm)
+        r, g, b = color
+        pdf.set_text_color(r, g, b)
+        pdf.set_font(font_family, font_style, font_size_pt)
+        pdf.text(x_mm, baseline_y, text)
+
+    def _draw_text_top_center(self, pdf, x_center_mm, y_top_mm, text,
+                               font_family, font_style, font_size_pt, pil_font, ppi,
+                               color=(0, 0, 0)):
+        """以中-顶锚点绘制文字（水平居中，y 对齐文字视觉顶端）"""
+        left_mm, top_mm, right_mm, _ = self._pil_bbox_mm(pil_font, text, ppi)
+        text_w_mm = right_mm - left_mm
+        x_mm = x_center_mm - text_w_mm / 2.0
+        baseline_y = y_top_mm + (-top_mm)
+        r, g, b = color
+        pdf.set_text_color(r, g, b)
+        pdf.set_font(font_family, font_style, font_size_pt)
+        pdf.text(x_mm, baseline_y, text)
+
+    def _draw_text_mid_center(self, pdf, x_center_mm, y_center_mm, text,
+                               font_family, font_style, font_size_pt, pil_font, ppi,
+                               color=(0, 0, 0)):
+        """以中-中锚点绘制文字（等价于 PIL anchor='mm'）"""
+        left_mm, top_mm, right_mm, bottom_mm = self._pil_bbox_mm(pil_font, text, ppi)
+        text_w_mm = right_mm - left_mm
+        text_h_mm = bottom_mm - top_mm
+        x_mm = x_center_mm - text_w_mm / 2.0
+        baseline_y = y_center_mm + (-top_mm) - text_h_mm / 2.0
+        r, g, b = color
+        pdf.set_text_color(r, g, b)
+        pdf.set_font(font_family, font_style, font_size_pt)
+        pdf.text(x_mm, baseline_y, text)
+
+    @staticmethod
+    def _draw_s_curve_bottom(pdf, panel_x, panel_y, panel_w, panel_h,
+                              x3_rel, h_left, x4_rel, h_right):
+        """在面板底部绘制 S 形过渡黑色底框"""
+        x3 = panel_x + x3_rel
+        y3 = panel_y + panel_h - h_left
+        x4 = panel_x + x4_rel
+        y4 = panel_y + panel_h - h_right
+        panel_bottom = panel_y + panel_h
+
+        pdf.set_fill_color(0, 0, 0)
+
+        if x3_rel > 0:
+            pdf.rect(panel_x, y3, x3_rel, h_left, style='F')
+
+        right_w = panel_w - x4_rel
+        if right_w > 0:
+            pdf.rect(x4, y4, right_w, h_right, style='F')
+
+        curve_pts = []
+        for i in range(21):
+            t = i / 20.0
+            cx = x3 + (x4 - x3) * t
+            t_s = t * t * (3.0 - 2.0 * t)
+            cy = y3 + (y4 - y3) * t_s
+            curve_pts.append((cx, cy))
+        curve_pts.append((x4, panel_bottom))
+        curve_pts.append((x3, panel_bottom))
+        pdf.polygon(curve_pts, style='F')
+
+    # ── 面板绘制方法（与 mcombo_standard 相同）──────────────────────────────────
+
+    def _draw_flap_left(self, pdf: FPDF, sku_config,
+                        x_mm, y_mm, w_mm, h_mm, rotate_180=False):
+        """绘制左侧翻盖面板（up 正常，down 旋转 180°）"""
+        total_boxes = sku_config.box_number['total_boxes']
+        icon = self.resources[f'icon_left_{total_boxes}_panel']
+
+        target_h_mm = 100.0
+        max_w_mm = w_mm * 0.8
+        icon_w_natural = target_h_mm * icon.width / icon.height
+        if icon_w_natural > max_w_mm:
+            icon_w_mm = max_w_mm
+            icon_h_mm = icon_w_mm * icon.height / icon.width
         else:
-            # 宽度没超过限制，按18cm高度缩放
-            canvas_left_up = general_functions.paste_center_with_height(
-                canvas_left_up, icon_left_up_panel, height_cm=target_height_cm, dpi=sku_config.dpi)
+            icon_w_mm = icon_w_natural
+            icon_h_mm = target_h_mm
 
+        icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
+        img_x = x_mm + (w_mm - icon_w_mm) / 2.0
+        img_y = y_mm + (h_mm - icon_h_mm) / 2.0
+        pdf.image(icon_to_use, x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
 
+    def _draw_flap_right(self, pdf: FPDF, sku_config,
+                         x_mm, y_mm, w_mm, h_mm, rotate_180=False):
+        """绘制右侧翻盖面板（up 旋转 180°，down 正常）"""
+        total_boxes = sku_config.box_number['total_boxes']
+        current_box = sku_config.box_number['current_box']
+        icon = self.resources[f'icon_right_{total_boxes}-{current_box}_panel']
 
-        # canvas_left_up = general_functions.paste_center_with_height(
-        #     canvas_left_up, icon_left_up_panel, height_cm=18, dpi=sku_config.dpi)
-        # canvas_left_down = general_functions.paste_center_with_height(
-        #     canvas_left_down, icon_left_down_panel, height_cm=10, dpi=sku_config.dpi)
-
-        return canvas_left_up, canvas_left_down
-
-    def generate_right_panel(self, sku_config):
-
-        """生成右侧面板"""
-        canvas_right_up = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.half_w_px),
-                                    sku_config.background_color)
-        canvas_right_down = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.w_px),
-                                      sku_config.background_color)
-
-        total_box_number = sku_config.box_number['total_boxes']
-        current_box_number = sku_config.box_number['current_box']
-        icon_left_panel = self.resources[f'icon_top_box_number_{total_box_number}_{current_box_number}']
-
-        icon_right_panel_down = icon_left_panel.rotate(180, expand=True)
-
-        target_height_cm = 18  # 默认高度18cm
-        max_width_cm = sku_config.l_px * 0.8 / sku_config.dpi  # 面板长度的85%转换为cm
-        
-        # 获取原始尺寸（像素），计算按高度18cm缩放后的宽度（厘米）
-        icon_w_px, icon_h_px = icon_right_panel_down.size
-        scaled_width_cm = icon_w_px / icon_h_px * target_height_cm  # 宽高比 × 目标高度
-        
-        # 如果按18cm高度缩放后，宽度超过面板长度的85%，则改用宽度限制
-        if scaled_width_cm > max_width_cm:
-            # canvas_right_up = general_functions.paste_center_with_width(
-            #     canvas_right_up, icon_right_panel_down, width_cm=max_width_cm, dpi=sku_config.dpi)
-            canvas_right_down = general_functions.paste_center_with_width(
-                canvas_right_down, icon_right_panel_down, width_cm=max_width_cm, dpi=sku_config.dpi)
+        target_h_mm = 100.0
+        max_w_mm = w_mm * 0.8
+        icon_w_natural = target_h_mm * icon.width / icon.height
+        if icon_w_natural > max_w_mm:
+            icon_w_mm = max_w_mm
+            icon_h_mm = icon_w_mm * icon.height / icon.width
         else:
-            # 宽度没超过限制，按18cm高度缩放
-            # canvas_right_up = general_functions.paste_center_with_height(
-            #     canvas_right_up, icon_right_panel_up, height_cm=target_height_cm, dpi=sku_config.dpi)
-            canvas_right_down = general_functions.paste_center_with_height(
-                canvas_right_down, icon_right_panel_down, height_cm=target_height_cm, dpi=sku_config.dpi)
+            icon_w_mm = icon_w_natural
+            icon_h_mm = target_h_mm
 
+        icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
+        img_x = x_mm + (w_mm - icon_w_mm) / 2.0
+        img_y = y_mm + (h_mm - icon_h_mm) / 2.0
+        pdf.image(icon_to_use, x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
 
-        # canvas_right_up = general_functions.paste_center_with_height(
-        #     canvas_right_up, icon_right_panel_up, height_cm=9, dpi=sku_config.dpi)
-        # canvas_right_down = general_functions.paste_center_with_height(
-        #     canvas_right_down, icon_right_panel_down, height_cm=17, dpi=sku_config.dpi)
+    def _draw_front_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
+        """绘制正面（正唛）面板"""
+        ppi = sku_config.ppi
+        px_per_mm = ppi / 25.4
 
-        return canvas_right_up, canvas_right_down
-
-    def generate_front_panel(self, sku_config):
-        """生成正面面板"""
-        canvas = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.h_px), sku_config.background_color)
+        # ── 1. 商标 Logo（居中顶部，高度 = 面板高度 / 3）──────────────────────
         icon_trademark = self.resources['icon_trademark']
+        tm_h_mm = h_mm / 3.0
+        with Image.open(icon_trademark) as _img:
+            _tm_w, _tm_h = _img.size
+        tm_w_mm = tm_h_mm * _tm_w / _tm_h
+        if tm_w_mm > w_mm * 0.9:
+            tm_w_mm = w_mm * 0.9
+            tm_h_mm = tm_w_mm * _tm_h / _tm_w
+        tm_x = x_mm + (w_mm - tm_w_mm) / 2.0
+        tm_y = y_mm
+        pdf.image(icon_trademark, x=tm_x, y=tm_y, w=tm_w_mm, h=tm_h_mm)
 
-        fonts = self._get_fonts(sku_config)
+        # ── 2. 颜色标签（右上角，黑色圆角背景 + 金色文字）──────────────────────
+        color_text = str(sku_config.color)
+        color_size_px = int(h_mm * px_per_mm * 51 / 1332)
+        color_size_pt = color_size_px * 72.0 / ppi
+        pil_color = ImageFont.truetype(self.font_paths['Arial Bold'], color_size_px)
 
-        # 粘贴正唛标志
-        canvas_w, canvas_h = canvas.size
+        _, top_c, _, bottom_c = self._pil_bbox_mm(pil_color, color_text, ppi)
+        left_c, _, right_c, _ = self._pil_bbox_mm(pil_color, color_text, ppi)
+        text_w_mm = right_c - left_c
+        text_h_mm = bottom_c - top_c
 
-        target_h_by_height = canvas_h // 3
-        icon_by_height = general_functions.scale_by_height(icon_trademark, target_h_by_height)
-        resized_w, resized_h = icon_by_height.size
+        color_x = x_mm + w_mm - text_w_mm - 40.0
+        color_y_top = y_mm + 40.0
 
-        # 2. 检查宽度是否超过箱子长度的1/3
-        max_allowed_w = canvas_w // 2  # 箱子长度的1/3
+        pad_x_mm = 8.0
+        pad_y_top_mm = 4.0 * 0.7
+        pad_y_bot_mm = 4.0 * 1.4
+        radius_mm = 16 * 25.4 / ppi
 
-        if resized_w > max_allowed_w:
-            # 宽度超限，改为按宽度缩放
-            icon_trademark_resized = general_functions.scale_by_width(icon_trademark, max_allowed_w)
-        else:
-            # 宽度未超限，使用按高度缩放的结果
-            icon_trademark_resized = icon_by_height
+        rect_x = color_x - pad_x_mm
+        rect_y = color_y_top - pad_y_top_mm
+        rect_w = text_w_mm + 2 * pad_x_mm
+        rect_h = text_h_mm + pad_y_top_mm + pad_y_bot_mm
 
-        icon_trademark_target_w, icon_trademark_target_h = icon_trademark_resized.size
-        paste_x = (canvas_w - icon_trademark_target_w) // 2
-        paste_y = 0
-        canvas.paste(icon_trademark_resized, (paste_x, paste_y), mask=icon_trademark_resized)
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(rect_x, rect_y, rect_w, rect_h,
+                 style='F', round_corners=True, corner_radius=radius_mm)
 
-        draw = ImageDraw.Draw(canvas)
-        bottom_bg_h = int(sku_config.bottom_gb_h * sku_config.dpi)
+        self._draw_text_top_left(pdf, color_x, color_y_top, color_text,
+                                 'Calibri-Bold', '', color_size_pt, pil_color, ppi,
+                                 color=(161, 142, 102))
 
-        # 生成底部黑色底框和动态SKU文本
-        icon_company = self.resources['icon_company']
-        icon_box_number = self.resources[f"icon_box_number_{sku_config.box_number['current_box']}"]
-        general_functions.draw_dynamic_bottom_bg(canvas, sku_config, icon_company, icon_box_number, self.font_paths)
-
-        # 写入右上角颜色信息
-        color_font = fonts['color_font']
-        color_text = f"{sku_config.color}"
-        bbox = draw.textbbox((0, 0), color_text, font=color_font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-        color_x = canvas_w - text_w - int(4 * sku_config.dpi)
-        color_y = int(4 * sku_config.dpi)
-        color_xy = (color_x, color_y)
-
-        draw = general_functions.draw_rounded_bg_for_text(
-            draw, bbox, sku_config, color_xy,
-            bg_color=(0, 0, 0), padding_cm=(0.8, 0.4), radius=16)
-        draw.text((color_x, color_y), color_text, font=color_font, fill=(161, 142, 102))
-
-        # 写入产品名称和尺寸信息
-        # ========== 修改开始：动态调整 product 字体大小 ==========
-        fonts = self._get_fonts(sku_config)
-
-        # 计算 product 文字的最大允许宽度（箱子长度的85%）
-        max_product_width = int(sku_config.l_px * 0.85)
-
+        # ── 3. 产品名称 + 装饰椭圆 + 尺寸文字 ──────────────────────────────────
         product_text = sku_config.product
-        product_font = fonts['product_font']
+        size_text = getattr(sku_config, 'size', None) or " "
 
-        # 检查当前字体是否超出限制，如果超出则缩小字体
-        bbox_product = product_font.getbbox(product_text)
-        product_w = bbox_product[2] - bbox_product[0]
+        product_size_px = int(h_mm * px_per_mm * 180 / 1332)
+        size_size_px    = int(h_mm * px_per_mm * 60  / 1332)
 
-        # 如果文字宽度超过限制，按比例缩小字体
-        if product_w > max_product_width:
-            scale_factor = max_product_width / product_w
-            new_font_size = int(product_font.size * scale_factor)
-            # 重新加载字体，使用新的大小
-            product_font = ImageFont.truetype(
-                self.font_paths['itc_demi'],
-                size=new_font_size
-            )
-            # 重新计算文字宽度
-            bbox_product = product_font.getbbox(product_text)
-            product_w = bbox_product[2] - bbox_product[0]
+        pil_product = ImageFont.truetype(self.font_paths['Arial'], product_size_px)
+        p_left, p_top, p_right, p_bottom = pil_product.getbbox(product_text)
+        product_w_px = p_right - p_left
+        max_product_w_px = int(w_mm * px_per_mm * 0.85)
+        if product_w_px > max_product_w_px:
+            product_size_px = int(product_size_px * max_product_w_px / product_w_px)
+            pil_product = ImageFont.truetype(self.font_paths['Arial'], product_size_px)
+            p_left, p_top, p_right, p_bottom = pil_product.getbbox(product_text)
+            product_w_px = p_right - p_left
+        product_size_pt = product_size_px * 72.0 / ppi
+        product_w_mm = product_w_px / px_per_mm
+        product_h_mm = (p_bottom - p_top) / px_per_mm
 
-        size_text = getattr(sku_config, 'size', None) or " " # 如果尺寸信息为空，则使用一个空格占位，避免后续计算出错
-        size_font = fonts['size_font']
-        bbox_size = draw.textbbox((0, 0), size_text, font=size_font)
-        size_w = bbox_size[2] - bbox_size[0]
+        pil_size = ImageFont.truetype(self.font_paths['Arial Bold'], size_size_px)
+        s_left, s_top, s_right, s_bottom = pil_size.getbbox(size_text)
+        size_w_mm = (s_right - s_left) / px_per_mm
+        size_h_mm = (s_bottom - s_top) / px_per_mm
+        size_size_pt = size_size_px * 72.0 / ppi
 
-        gap_px = int(1 * sku_config.dpi)
-        # line_height = 7 / 0.74
-        line_height = int(0.3 * sku_config.dpi) # 黑线加粗到约 0.5cm
-        line_width = int(product_w * 0.85)
-        total_group_height = product_font.size + line_height + size_font.size + gap_px * 2
+        h_right_mm = 100.0
+        gap_mm = 10.0
+        line_h_mm = 3.0
+        line_w_mm = product_w_mm * 0.85
+        size_offset_mm = 5.0
 
-        remaining_space = canvas_h - icon_trademark_target_h - bottom_bg_h
-        group_start_y = icon_trademark_target_h + (remaining_space - total_group_height) // 2
+        total_group_h = (product_h_mm + gap_mm +
+                         line_h_mm + gap_mm +
+                         size_h_mm + size_offset_mm)
+        bottom_section_top = y_mm + h_mm - h_right_mm
+        logo_bottom        = y_mm + tm_h_mm
+        available_h        = bottom_section_top - logo_bottom
+        group_start_y      = logo_bottom + (available_h - total_group_h) / 2.0
 
-        # 绘制产品名称
-        product_x = (canvas_w - product_w) // 2
-        ascent, descent = product_font.getmetrics()
-        # draw.text((product_x, group_start_y + ascent), product_text, font=product_font, fill=(0, 0, 0), anchor="ls")
-        product_offset_y = int(0.5 * sku_config.dpi)  # 产品信息上移约 0.5cm
-        draw.text((product_x, group_start_y + ascent - product_offset_y), product_text, font=product_font, fill=(0, 0, 0), anchor="ls")
+        product_offset_mm = 5.0
+        product_x = x_mm + (w_mm - product_w_mm) / 2.0
+        self._draw_text_top_left(pdf, product_x,
+                                 group_start_y - product_offset_mm,
+                                 product_text,
+                                 'AvantGardeLT-Demi', '', product_size_pt, pil_product, ppi)
 
-        # 绘制下划线
-        line_y_top = group_start_y + product_font.size + gap_px
-        line_x0 = (canvas_w - line_width) // 2
-        line_x1 = line_x0 + line_width
-        line_box = [line_x0, line_y_top, line_x1, line_y_top + line_height]
-        general_functions.draw_smooth_ellipse(draw, canvas, line_box, fill=(0, 0, 0))
+        line_y = group_start_y + product_h_mm + gap_mm
+        line_x = x_mm + (w_mm - line_w_mm) / 2.0
+        pdf.set_fill_color(0, 0, 0)
+        pdf.ellipse(line_x, line_y, line_w_mm, line_h_mm, style='F')
 
-        # 绘制尺寸信息
-        size_x = (canvas_w - size_w) // 2
-        # size_y = line_y_top + gap_px + line_height
-        size_y = line_y_top + gap_px + line_height + int(0.5 * sku_config.dpi)  # 尺寸信息下移约 0.5cm
-        draw.text((size_x, size_y), size_text, font=size_font, fill=(0, 0, 0))
+        size_y_top = line_y + line_h_mm + gap_mm + size_offset_mm
+        size_x = x_mm + (w_mm - size_w_mm) / 2.0
+        self._draw_text_top_left(pdf, size_x, size_y_top,
+                                 size_text, 'Calibri-Bold', '', size_size_pt, pil_size, ppi)
 
-        return canvas
+        # ── 4. 底部黑色底框（S 形过渡）──────────────────────────────────────────
+        icon_company = self.resources['icon_company']
+        icon_company_h_mm = 16.0
+        with Image.open(icon_company) as _img:
+            _cw, _ch = _img.size
+        icon_company_w_mm = icon_company_h_mm * _cw / _ch
 
-    def generate_side_panel(self, sku_config):
-        """生成侧面面板"""
+        left_section_w_mm = 10.0 + icon_company_w_mm + 40.0
+        h_left_mm  = 50.0
+        x3_rel = left_section_w_mm - 100.0
+        x4_rel = left_section_w_mm
 
-        canvas = Image.new(sku_config.color_mode, (sku_config.h_px, sku_config.w_px), sku_config.background_color)
-        self.bottom_gb_h_px1 = int(8 * sku_config.dpi)
+        self._draw_s_curve_bottom(
+            pdf, x_mm, y_mm, w_mm, h_mm,
+            x3_rel=x3_rel, h_left=h_left_mm,
+            x4_rel=x4_rel, h_right=h_right_mm,
+        )
 
+        bottom_gb_h_mm = sku_config.bottom_gb_h * 10.0
+        company_y = y_mm + h_mm - bottom_gb_h_mm
+        pdf.image(icon_company,
+                  x=x_mm + 10.0, y=company_y,
+                  w=icon_company_w_mm, h=icon_company_h_mm)
 
-        general_functions.draw_side_dynamic_bottom_bg_vertical(
-            canvas, sku_config, self.resources['icon_company'], self.font_paths)
+        current_box = sku_config.box_number['current_box']
+        icon_box = self.resources[f'icon_box_number_{current_box}']
+        box_icon_h_mm = h_right_mm / 4.0
+        with Image.open(icon_box) as _img:
+            _bw, _bh = _img.size
+        box_icon_w_mm = box_icon_h_mm * _bw / _bh
+        box_icon_y = y_mm + h_mm - h_left_mm + (h_left_mm - box_icon_h_mm) / 2.0
+        pdf.image(icon_box,
+                  x=x_mm + 10.0, y=box_icon_y,
+                  w=box_icon_w_mm, h=box_icon_h_mm)
 
-        # 放置侧唛标签框
-        icon_side_label_box = self.resources['icon_side_label_box']
-        icon_side_label_box_resized = general_functions.scale_by_height(
-            icon_side_label_box, int(5 * sku_config.dpi))
-        icon_side_label_box_x, icon_side_label_box_y = int(3 * sku_config.dpi), int(4 * sku_config.dpi)
-        canvas.paste(icon_side_label_box_resized, (icon_side_label_box_x, icon_side_label_box_y),
-                     mask=icon_side_label_box_resized)
+        sku_text = sku_config.sku_name
+        sku_area_left_mm  = 10.0 + icon_company_w_mm + 30.0
+        sku_area_right_mm = w_mm - 30.0
+        sku_max_w_mm = sku_area_right_mm - sku_area_left_mm
+        sku_max_h_mm = 80.0
 
-        # 放置侧唛 logo
+        sku_size_pt, pil_sku = self._get_font_size(
+            sku_text, 'Arial Bold', sku_max_w_mm, ppi)
+        _, sku_top, _, sku_bottom = self._pil_bbox_mm(pil_sku, sku_text, ppi)
+        sku_h_mm = sku_bottom - sku_top
+        if sku_h_mm > sku_max_h_mm:
+            sku_size_pt, pil_sku = self._get_font_size(
+                sku_text, 'Arial Bold',
+                sku_max_w_mm * sku_max_h_mm / sku_h_mm, ppi)
+
+        sku_center_x = x_mm + (sku_area_left_mm + sku_area_right_mm) / 2.0
+        sku_center_y = y_mm + h_mm - h_right_mm / 2.0 + 3.0
+
+        self._draw_text_mid_center(pdf, sku_center_x, sku_center_y,
+                                   sku_text, 'Calibri-Bold', '', sku_size_pt, pil_sku, ppi,
+                                   color=(161, 142, 102))
+
+    def _draw_side_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
+        """绘制侧面（侧唛）面板"""
+        ppi = sku_config.ppi
+        px_per_mm = ppi / 25.4
+        l_mm = sku_config.l_cm * 10
+
+        # ── 1. 底部黑色底框（S 形过渡）──────────────────────────────────────────
+        icon_company = self.resources['icon_company']
+        icon_company_h_mm = 16.0
+        with Image.open(icon_company) as _img:
+            _cw, _ch = _img.size
+        icon_company_w_mm = icon_company_h_mm * _cw / _ch
+
+        h_left_mm  = sku_config.bottom_gb_h * 10.0
+        h_right_mm = h_left_mm * 0.5
+
+        left_section_w_mm = l_mm - (10.0 + icon_company_w_mm + 40.0)
+        max_left_mm = w_mm - 100.0 - 10.0
+        if left_section_w_mm > max_left_mm:
+            left_section_w_mm = max_left_mm
+
+        x3_rel = left_section_w_mm
+        x4_rel = min(left_section_w_mm + 100.0, w_mm - 10.0)
+
+        self._draw_s_curve_bottom(
+            pdf, x_mm, y_mm, w_mm, h_mm,
+            x3_rel=x3_rel, h_left=h_left_mm,
+            x4_rel=x4_rel, h_right=h_right_mm,
+        )
+
+        sku_text = sku_config.sku_name
+        sku_max_w_mm = left_section_w_mm
+        sku_max_h_mm = 80.0
+
+        sku_size_pt, pil_sku = self._get_font_size(
+            sku_text, 'Arial Bold', sku_max_w_mm, ppi)
+        _, sku_top, _, sku_bottom = self._pil_bbox_mm(pil_sku, sku_text, ppi)
+        sku_h_mm = sku_bottom - sku_top
+        if sku_h_mm > sku_max_h_mm:
+            sku_size_pt, pil_sku = self._get_font_size(
+                sku_text, 'Arial Bold',
+                sku_max_w_mm * sku_max_h_mm / sku_h_mm, ppi)
+
+        sku_area_left_mm  = 30.0
+        sku_area_right_mm = left_section_w_mm
+        sku_center_x = x_mm + (sku_area_left_mm + sku_area_right_mm) / 2.0
+        sku_center_y = y_mm + h_mm - h_left_mm / 2.0 + 3.0
+
+        self._draw_text_mid_center(pdf, sku_center_x, sku_center_y,
+                                   sku_text, 'Calibri-Bold', '', sku_size_pt, pil_sku, ppi,
+                                   color=(161, 142, 102))
+
+        # ── 2. 侧唛标签框（左上角 3cm, 3cm）──────────────────────────────────
+        icon_label_box = self.resources['icon_side_label_box']
+        label_h_mm = 50.0
+        with Image.open(icon_label_box) as _img:
+            _lw, _lh = _img.size
+        label_w_mm = label_h_mm * _lw / _lh
+        pdf.image(icon_label_box,
+                  x=x_mm + 30.0, y=y_mm + 30.0,
+                  w=label_w_mm, h=label_h_mm)
+
+        # ── 3. 侧唛 Logo（右上角，高 5cm，宽不超过 (w-8cm)/2）─────────────────
         icon_side_logo = self.resources['icon_side_logo']
-        side_logo_height = int(4 * sku_config.dpi)  # 修正拼写：heigft → height
-        # logo宽度不能超过 (侧唛宽度 - 8cm) 的一半
-        max_side_logo_width = int((sku_config.h_px - 8 * sku_config.dpi) * 0.5)
-        # 先按高度5cm缩放
-        icon_side_logo_resized = general_functions.scale_by_height(icon_side_logo, side_logo_height)
-        icon_side_logo_w, icon_side_logo_h = icon_side_logo_resized.size
-        # 如果按高度缩放后，宽度超过限制，则按宽度限制重新缩放
-        if icon_side_logo_w > max_side_logo_width:
-            icon_side_logo_resized = general_functions.scale_by_width(icon_side_logo, max_side_logo_width)
-            icon_side_logo_w, icon_side_logo_h = icon_side_logo_resized.size
-        icon_side_logo_x = canvas.width - icon_side_logo_w - int(4 * sku_config.dpi)
-        icon_side_logo_y = int(4 * sku_config.dpi)
-        canvas.paste(icon_side_logo_resized, (icon_side_logo_x, icon_side_logo_y), mask=icon_side_logo_resized)
+        side_logo_h_mm = 50.0
+        max_logo_w_mm  = (w_mm - 80.0) * 0.5
+        with Image.open(icon_side_logo) as _img:
+            _sw, _sh = _img.size
+        side_logo_w_mm = side_logo_h_mm * _sw / _sh
+        if side_logo_w_mm > max_logo_w_mm:
+            side_logo_w_mm = max_logo_w_mm
+            side_logo_h_mm = side_logo_w_mm * _sh / _sw
+        logo_x = x_mm + w_mm - side_logo_w_mm - 40.0
+        logo_y = y_mm + 40.0
+        pdf.image(icon_side_logo,
+                  x=logo_x, y=logo_y,
+                  w=side_logo_w_mm, h=side_logo_h_mm)
 
-        # 放置侧唛文字信息框
-        icon_side_text_box_spacing_left = int(2.81 * sku_config.dpi)
-        icon_side_text_box_spacing_bottom = int(1 * sku_config.dpi)
+        # ── 4. 侧唛文本框（含 G.W.、尺寸、条形码）──────────────────────────────
+        icon_text_box = self.resources['icon_side_text_box']
+        table_h_mm = 80.0
+        with Image.open(icon_text_box) as _img:
+            _tw, _th = _img.size
+        table_w_mm = table_h_mm * _tw / _th
 
-        table_height_px = int(8 * sku_config.dpi)
-
-        base_x = icon_side_text_box_spacing_left
-
-        base_y = canvas.height - self.bottom_gb_h_px1 - icon_side_text_box_spacing_bottom - table_height_px
-
-
-        icon_side_text_box = self.resources['icon_side_text_box'].copy()
-        icon_side_text_box_resized = general_functions.scale_by_height(icon_side_text_box, table_height_px)
+        spacing_left_mm   = 28.1
+        spacing_bottom_mm = 30.0
+        table_y = (y_mm + h_mm
+                   - sku_config.bottom_gb_h * 10.0
+                   - spacing_bottom_mm
+                   - table_h_mm)
 
         if sku_config.sponge_verified:
-            icon_side_sponge = self.resources['icon_side_sponge'].copy()
-            icon_side_sponge_resized = general_functions.scale_by_height(icon_side_sponge, table_height_px)
-            canvas.paste(icon_side_sponge_resized, (base_x, base_y), mask=icon_side_sponge_resized)
-
-            base_x += icon_side_sponge_resized.size[0] + int(0.1 * sku_config.dpi)
-            fill_image = general_functions.fill_sidepanel_text(
-                icon_side_text_box_resized, sku_config, self.font_paths)
-            canvas.paste(fill_image, (base_x, base_y), mask=icon_side_text_box_resized)
+            icon_sponge = self.resources['icon_side_sponge']
+            sponge_w_mm = table_h_mm * icon_sponge.width / icon_sponge.height
+            sponge_x = x_mm + spacing_left_mm
+            pdf.image(icon_sponge,
+                      x=sponge_x, y=table_y,
+                      w=sponge_w_mm, h=table_h_mm)
+            table_x = sponge_x + sponge_w_mm + 1.0
         else:
-            base_x = icon_side_text_box_spacing_left
-            base_y = canvas.height - sku_config.bottom_gb_h_px - icon_side_text_box_spacing_bottom - \
-                     icon_side_text_box_resized.size[1]
+            table_x = x_mm + spacing_left_mm
 
-            fill_image = general_functions.fill_sidepanel_text(
-                icon_side_text_box_resized, sku_config, self.font_paths)
-            canvas.paste(fill_image, (base_x, base_y), mask=icon_side_text_box_resized)
+        pdf.image(icon_text_box,
+                  x=table_x, y=table_y,
+                  w=table_w_mm, h=table_h_mm)
 
-        canvas = canvas.rotate(90, expand=True)
-        return canvas
+        self._draw_side_text_content(
+            pdf, sku_config, table_x, table_y, table_w_mm, table_h_mm)
 
-    def generate_side_up_down_panel(self, sku_config):
+    def _draw_side_text_content(self, pdf: FPDF, sku_config,
+                                 x_mm, y_mm, w_mm, h_mm):
+        """在侧唛文本框区域叠加绘制动态文字和条形码"""
+        ppi = sku_config.ppi
+        px_per_mm = ppi / 25.4
 
-        # canvas = Image.new(sku_config.color_mode, (sku_config.h_px, sku_config.w_px), sku_config.background_color)
-        canvas_side_up = Image.new(sku_config.color_mode, (sku_config.w_px, sku_config.half_w_px), sku_config.background_color)
-        canvas_side_down = Image.new(sku_config.color_mode, (sku_config.w_px, sku_config.half_w_px), sku_config.background_color)
-        return canvas_side_up, canvas_side_down
+        label_px   = int(h_mm * px_per_mm * 0.081)
+        bold_px    = int(h_mm * px_per_mm * 0.095)
+        barcode_px = int(h_mm * px_per_mm * 0.058)
+
+        pil_label   = ImageFont.truetype(self.font_paths['Arial'],     label_px)
+        pil_bold    = ImageFont.truetype(self.font_paths['Arial Bold'], bold_px)
+        pil_barcode = ImageFont.truetype(self.font_paths['Arial Bold'], barcode_px)
+
+        label_pt   = label_px   * 72.0 / ppi
+        bold_pt    = bold_px    * 72.0 / ppi
+        barcode_pt = barcode_px * 72.0 / ppi
+
+        text_x = x_mm + w_mm * 0.651
+
+        weight_text = (f'G.W./N.W.: {sku_config.side_text["gw_value"]} / '
+                       f'{sku_config.side_text["nw_value"]} lbs')
+        dim_text = (f'BOX SIZE: {sku_config.l_in:.1f}\'\' x '
+                    f'{sku_config.w_in:.1f}\'\' x {sku_config.h_in:.1f}\'\'')
+
+        self._draw_text_top_left(pdf, text_x, y_mm + h_mm * 0.044,
+                                 weight_text, 'AvantGardeLT-Demi', '', label_pt, pil_label, ppi)
+        self._draw_text_top_left(pdf, text_x, y_mm + h_mm * 0.214,
+                                 dim_text, 'AvantGardeLT-Demi', '', label_pt, pil_label, ppi)
+
+        left_center_mm  = x_mm + w_mm * 0.46
+        right_center_mm = x_mm + w_mm * 0.847
+        barcode_y_mm    = y_mm + h_mm * 0.42
+        barcode_text_y  = y_mm + h_mm * 0.76
+        barcode_h_mm    = h_mm * 0.35
+
+        sku_bc_w_mm = w_mm * 0.46
+        sku_bc_img = generate_barcode_image(
+            sku_config.sku_name,
+            int(sku_bc_w_mm * px_per_mm),
+            int(barcode_h_mm * px_per_mm),
+        )
+        pdf.image(sku_bc_img,
+                  x=left_center_mm - sku_bc_w_mm / 2.0,
+                  y=barcode_y_mm,
+                  w=sku_bc_w_mm, h=barcode_h_mm)
+        self._draw_text_top_center(pdf, left_center_mm, barcode_text_y,
+                                   sku_config.sku_name,
+                                   'Calibri-Bold', '', barcode_pt, pil_barcode, ppi)
+
+        sn_code = sku_config.side_text['sn_code']
+        sn_bc_w_mm = w_mm * 0.28
+        sn_bc_img = generate_barcode_image(
+            sn_code,
+            int(sn_bc_w_mm * px_per_mm),
+            int(barcode_h_mm * px_per_mm),
+        )
+        pdf.image(sn_bc_img,
+                  x=right_center_mm - sn_bc_w_mm / 2.0,
+                  y=barcode_y_mm,
+                  w=sn_bc_w_mm, h=barcode_h_mm)
+        self._draw_text_top_center(pdf, right_center_mm, barcode_text_y,
+                                   sn_code,
+                                   'Calibri-Bold', '', barcode_pt, pil_barcode, ppi)
+
+        made_text = sku_config.side_text.get('origin_text', 'MADE IN CHINA')
+        self._draw_text_top_left(pdf, x_mm + w_mm * 0.51, y_mm + h_mm * 0.87,
+                                 made_text, 'Calibri-Bold', '', bold_pt, pil_bold, ppi)

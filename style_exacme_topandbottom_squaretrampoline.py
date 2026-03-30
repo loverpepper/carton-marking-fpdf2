@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-Exacme 方形蹦床天地盖样式 - 将原有的 BoxMarkEngine 转换为样式类
+Exacme 方形蹦床天地盖样式 - fpdf2 版
 """
-from PIL import Image, ImageDraw, ImageFont
-import pathlib as Path
+from fpdf import FPDF
+from PIL import Image, ImageFont
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
 from general_functions import generate_barcode_image
@@ -13,27 +13,22 @@ import re
 
 @StyleRegistry.register
 class ExacmeTopAndBottomSquareTrampolineStyle(BoxMarkStyle):
-    '''Exacme 方形蹦床天地盖样式'''
-    
+    """Exacme 方形蹦床天地盖样式 (fpdf2 版)"""
+
     def get_style_name(self):
         return "exacme_topandbottom_squaretrampoline"
-    
+
     def get_style_description(self):
         return "Exacme 方形蹦床天地盖箱唛样式"
-    
+
     def get_required_params(self):
-        return ['length_cm', 'width_cm', 'height_cm', 'ppi', 'color', 'product', 'side_text', 'sku_name', 'box_number']
-    
+        return ['length_cm', 'width_cm', 'height_cm', 'ppi', 'color', 'product',
+                'side_text', 'sku_name', 'box_number']
+
     def get_preview_images(self):
-        """
-        从 assets/Exacme/方形蹦床天地盖/实例生成图/ 读取所有图片文件，
-        返回 [(文件名, PIL.Image), ...] 列表，按文件名排序。
-        若文件夹为空或不存在则返回空列表。
-        """
         preview_dir = self.base_dir / 'assets' / 'Exacme' / '方形蹦床天地盖' / '实例生成图'
         if not preview_dir.exists():
             return []
-        
         supported_exts = {'.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tiff'}
         results = []
         for img_path in sorted(preview_dir.iterdir()):
@@ -42,738 +37,690 @@ class ExacmeTopAndBottomSquareTrampolineStyle(BoxMarkStyle):
                     img = Image.open(img_path).convert('RGB')
                     results.append((img_path.name, img))
                 except Exception:
-                    pass  # 跳过无法打开的文件
+                    pass
         return results
-    
-    def get_layout_config(self, sku_config):
-        '''
-        Exacme 方形蹦床天地盖样式 - 5块布局（3列3行）
-        '''
-        
-        x0 = 0
-        x1 = sku_config.h_px
-        x2 = sku_config.h_px + sku_config.l_px
-        
-        y0 = 0
-        y1 = sku_config.h_px
-        y2 = sku_config.h_px + sku_config.w_px
-        
+
+    # ── 布局配置（mm）───────────────────────────────────────────────────────────
+
+    def get_layout_config_mm(self, sku_config):
+        h_mm = sku_config.h_cm * 10
+        l_mm = sku_config.l_cm * 10
+        w_mm = sku_config.w_cm * 10
+        x0, x1, x2 = 0.0, h_mm, h_mm + l_mm
+        y0, y1, y2 = 0.0, h_mm, h_mm + w_mm
         return {
-            # 第一行：
-            "back_side_panel": (x1, y0, sku_config.l_px, sku_config.h_px),  # 后侧面板
-            
-            # 第二行：
-            "left_side_panel": (x0, y1, sku_config.h_px, sku_config.w_px),       # 左侧面板
-            "top_panel": (x1, y1, sku_config.l_px, sku_config.w_px),        # 顶部面板
-            "right_side_panel": (x2, y1, sku_config.h_px, sku_config.w_px),      # 右侧面板
-            
-            # 第三行：
-            "front_side_panel": (x1, y2, sku_config.l_px, sku_config.h_px)  # 前侧面板
-        
+            "back_side_panel":  (x1, y0, l_mm, h_mm),
+            "left_side_panel":  (x0, y1, h_mm, w_mm),
+            "top_panel":        (x1, y1, l_mm, w_mm),
+            "right_side_panel": (x2, y1, h_mm, w_mm),
+            "front_side_panel": (x1, y2, l_mm, h_mm),
         }
-    
+
     def get_panels_mapping(self, sku_config):
-        """定义每个区域应该粘贴哪个面板"""
-        
         return {
-            'back_side_panel': 'back_side',
-            'left_side_panel': 'left_side',
-            'top_panel': 'top',
+            'back_side_panel':  'back_side',
+            'left_side_panel':  'left_side',
+            'top_panel':        'top',
             'right_side_panel': 'right_side',
-            'front_side_panel': 'front_side'  
+            'front_side_panel': 'front_side',
         }
-        
-    def generate_all_panels(self, sku_config):
-        """生成 Exacme 方形蹦床天地盖样式需要的所有面板"""
-        
-        canvas_front_side, canvas_back_side = self.generate_exacme_front_and_back_side(sku_config)
-        canvas_left_side, canvas_right_side = self.generate_exacme_left_and_right_side(sku_config)
-        canvas_top = self.generate_exacme_top_panel(sku_config)
-        
-        return {
-            'front_side': canvas_front_side,
-            'back_side': canvas_back_side,
-            'left_side': canvas_left_side,
-            'right_side': canvas_right_side,
-            'top': canvas_top
-        }
-    
+
+    # ── 资源 / 字体加载 ─────────────────────────────────────────────────────────
+
     def _load_resources(self):
-        """加载 Exacme 方形蹦床天地盖样式的图片资源"""
         res_base = self.base_dir / 'assets' / 'Exacme' / '方形蹦床天地盖' / '矢量文件'
-        
         self.resources = {
-            # 正唛图片资源
-            'icon_logo': Image.open(res_base / 'logo.png').convert('RGBA'),
-            'icon_middle_info_vertical': Image.open(res_base / '正唛中间信息-1.png').convert('RGBA'),
-            'icon_middle_info_horizontal': Image.open(res_base / '正唛中间信息-2.png').convert('RGBA'),
-            'icon_bottom_info': Image.open(res_base / '正唛底部提示信息.png').convert('RGBA'),
-            
-            # 前后侧唛标的图标资源
-            'icon_logo': Image.open(res_base / 'logo.png').convert('RGBA'),
-            'icon_company': Image.open(res_base / '上下侧唛公司信息.png').convert('RGBA'),
-            
-            # 左右侧唛标的图标资源
-            'icon_side_label_high': Image.open(res_base / '侧唛标签_高.png').convert('RGBA'),
-            'icon_side_label_wide': Image.open(res_base / '侧唛标签_宽.png').convert('RGBA'),
+            'icon_logo':                res_base / 'logo.png',
+            'icon_middle_info_vertical':   res_base / '正唛中间信息-1.png',
+            'icon_middle_info_horizontal': res_base / '正唛中间信息-2.png',
+            'icon_bottom_info':         res_base / '正唛底部提示信息.png',
+            'icon_company':             res_base / '上下侧唛公司信息.png',
+            'icon_side_label_high':     res_base / '侧唛标签_高.png',
+            'icon_side_label_wide':     res_base / '侧唛标签_宽.png',
         }
-    
+
     def _load_fonts(self):
-        """加载字体路径"""
         font_base = self.base_dir / 'assets' / 'Exacme' / '方形蹦床天地盖' / '箱唛字体'
         self.font_paths = {
-            'Arial Regular': str(font_base / 'arial.ttf'),
-            'Arial Bold': str(font_base / 'arialbd.ttf'),
+            'Arial':      str(font_base / 'arialmt.ttf'),
+            'Arial Bold': str(font_base / 'arial-boldmt.ttf'),
             'Arial Black': str(font_base / 'ariblk.ttf'),
         }
-    
-    def generate_exacme_front_and_back_side(self, sku_config):
-        """生成 Exacme 方形蹦床天地盖样式的前后侧面板"""
-        canvas = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.h_px), sku_config.background_color)
-        draw = ImageDraw.Draw(canvas)
-        
-        # ================= 1. 提取动态信息 =================
-        # 提取尺寸文字 (带有 H1 -> H10 的特殊规则)
-        size_text = "" 
-        match = re.search(r'H(\d)(\d{1,2})', sku_config.sku_name, re.IGNORECASE)
+
+    # ── fpdf2 字体注册 ──────────────────────────────────────────────────────────
+
+    def register_fonts(self, pdf: FPDF):
+        pdf.add_font('Arial',      '', self.font_paths['Arial'])
+        pdf.add_font('Arial',      'B', self.font_paths['Arial Bold'])
+        pdf.add_font('ArialBlack', '', self.font_paths['Arial Black'])
+
+    # ── 核心绘制入口 ────────────────────────────────────────────────────────────
+
+    def draw_to_pdf(self, pdf: FPDF, sku_config):
+        layout = self.get_layout_config_mm(sku_config)
+
+        r, g, b = sku_config.background_color
+        pdf.set_fill_color(r, g, b)
+        for _, (x, y, w, h) in layout.items():
+            pdf.rect(x, y, w, h, style='F')
+
+        x, y, w, h = layout['top_panel']
+        self._draw_top_panel(pdf, sku_config, x, y, w, h)
+
+        x, y, w, h = layout['front_side_panel']
+        self._draw_front_back_panel(pdf, sku_config, x, y, w, h, rotate_180=False)
+
+        x, y, w, h = layout['back_side_panel']
+        self._draw_front_back_panel(pdf, sku_config, x, y, w, h, rotate_180=True)
+
+        x, y, w, h = layout['left_side_panel']
+        self._draw_side_panel(pdf, sku_config, x, y, w, h, rotation_deg=-90)
+
+        x, y, w, h = layout['right_side_panel']
+        self._draw_side_panel(pdf, sku_config, x, y, w, h, rotation_deg=90)
+
+    # ── 内部辅助方法 ────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _pil_bbox_mm(pil_font, text, ppi):
+        left, top, right, bottom = pil_font.getbbox(text, anchor='ls')
+        px_per_mm = ppi / 25.4
+        return left / px_per_mm, top / px_per_mm, right / px_per_mm, bottom / px_per_mm
+
+    def _draw_text_top_left(self, pdf, x_mm, y_top_mm, text,
+                             font_family, font_style, font_size_pt, pil_font, ppi,
+                             color=(0, 0, 0)):
+        _, top_mm, _, _ = self._pil_bbox_mm(pil_font, text, ppi)
+        baseline_y = y_top_mm + (-top_mm)
+        r, g, b = color
+        pdf.set_text_color(r, g, b)
+        pdf.set_font(font_family, font_style, font_size_pt)
+        pdf.text(x_mm, baseline_y, text)
+
+    @staticmethod
+    def _img_dims_mm(img_path_or_pil, height_mm=None, width_mm=None):
+        """Return (w_mm, h_mm) for an image given a target height or width."""
+        if isinstance(img_path_or_pil, (str, __import__('pathlib').Path)):
+            with Image.open(img_path_or_pil) as img:
+                orig_w, orig_h = img.size
+        else:
+            orig_w, orig_h = img_path_or_pil.width, img_path_or_pil.height
+        if height_mm is not None:
+            return height_mm * orig_w / orig_h, height_mm
+        return width_mm, width_mm * orig_h / orig_w
+
+    @staticmethod
+    def _barcode_on_white(barcode_img):
+        bg = Image.new('RGB', barcode_img.size, (255, 255, 255))
+        if barcode_img.mode == 'RGBA':
+            bg.paste(barcode_img, mask=barcode_img.split()[3])
+        else:
+            bg.paste(barcode_img.convert('RGB'))
+        return bg
+
+    @staticmethod
+    def _extract_size_text(sku_name):
+        """从 SKU 名称中提取尺寸字符串，如 H812 → 8x12FT。"""
+        match = re.search(r'H(\d)(\d{1,2})', sku_name, re.IGNORECASE)
         if match:
             dim1 = match.group(1)
             dim2 = match.group(2)
             if dim2 == '1':
                 dim2 = '10'
-            size_text = f"{dim1}x{dim2}FT"
-            
-        # ================= 2. 准备字体 =================
-        # 第一排：尺寸 + 产品名 (常规体)
-        font_size_row1 = int(canvas.height * 0.15) 
-        font_row1 = ImageFont.truetype(self.font_paths['Arial Regular'], font_size_row1)
-        
-        # 第二排：SKU (超大粗体) + 颜色 (中等常规体)
-        font_size_row2_sku = int(canvas.height * 0.34) 
-        font_row2_sku = ImageFont.truetype(self.font_paths['Arial Black'], font_size_row2_sku)
-        font_size_row2_color = int(canvas.height * 0.12) 
-        font_row2_color = ImageFont.truetype(self.font_paths['Arial Regular'], font_size_row2_color)
-        
-        # 第三排：箱数提示 (较小常规体 + 粗体黑框)
-        font_size_row3 = int(canvas.height * 0.10) 
-        font_row3 = ImageFont.truetype(self.font_paths['Arial Regular'], font_size_row3)
-        font_row3_bold = ImageFont.truetype(self.font_paths['Arial Bold'], font_size_row3)
+            return f"{dim1}x{dim2}FT"
+        return "SIZE"
 
-        # ================= 3. 组装中间文字块 (Column) =================
-        # 3.1 第一排：直接把尺寸和产品名拼成一句话，保证底边完美对齐
-        row1 = engine.Text(f"{size_text} {sku_config.product}", font=font_row1)
-        
-        # 3.2 第二排：SKU 和颜色，底部对齐
-        row2_color_element = engine.Text(f"({sku_config.color.title()})", font=font_row2_color, nudge_y=-int(canvas.height * 0.03)) # 括号视觉上往往偏下，稍微往上提一点点
-        row2_left_spacer = engine.Spacer(width=row2_color_element.width, height=1) # 左侧隐形配重砖块，宽度和颜色元素一样，保证右侧颜色信息不会挤压 SKU 的位置
-        
+    # ── 面板绘制方法 ────────────────────────────────────────────────────────────
+
+    def _draw_front_back_panel(self, pdf: FPDF, sku_config,
+                                x_mm, y_mm, w_mm, h_mm, rotate_180=False):
+        """
+        绘制前/后侧面板（l×h）。
+        三行文字 + 两侧 Logo/公司信息。
+        back 面通过 pdf.rotation(180) 翻转。
+        """
+        ppi = sku_config.ppi
+        px_per_mm = ppi / 25.4
+
+        size_text = self._extract_size_text(sku_config.sku_name)
+
+        # 字体尺寸（proportional to h_mm）
+        row1_px    = int(h_mm * 0.15 * px_per_mm)
+        row2_sku_px  = int(h_mm * 0.34 * px_per_mm)
+        row2_col_px  = int(h_mm * 0.12 * px_per_mm)
+        row3_px    = int(h_mm * 0.10 * px_per_mm)
+
+        pil_row1      = ImageFont.truetype(self.font_paths['Arial'], row1_px)
+        pil_row2_sku  = ImageFont.truetype(self.font_paths['Arial Black'], row2_sku_px)
+        pil_row2_col  = ImageFont.truetype(self.font_paths['Arial'], row2_col_px)
+        pil_row3      = ImageFont.truetype(self.font_paths['Arial'], row3_px)
+        pil_row3_bold = ImageFont.truetype(self.font_paths['Arial Bold'], row3_px)
+
+        row1_pt    = row1_px    * 72.0 / ppi
+        row2_sku_pt  = row2_sku_px  * 72.0 / ppi
+        row2_col_pt  = row2_col_px  * 72.0 / ppi
+        row3_pt    = row3_px    * 72.0 / ppi
+
+        # 间距和边距
+        spacing_mm  = h_mm * 0.10
+        side_pad_mm = 25.0  # 2.5 cm
+        box_pad_mm  = 0.6 * 10   # 6.0 mm
+        box_radius  = h_mm * 0.05
+
+        logo_w_mm, logo_h_mm = self._img_dims_mm(self.resources['icon_logo'],
+                                                  width_mm=w_mm * 0.15)
+        company_w_mm, company_h_mm = self._img_dims_mm(self.resources['icon_company'],
+                                                       width_mm=w_mm * 0.18)
+
+        # ---- Row 1: size_text + product ----
+        row1_text = f"{size_text} {sku_config.product}"
+        row1_elem = engine.Text(row1_text, 'Arial', '', row1_pt,
+                                pil_font=pil_row1, ppi=ppi)
+
+        # ---- Row 2: SKU (huge) + Color ----
+        color_text = f"({sku_config.color.title()})"
+        row2_col_elem = engine.Text(color_text, 'Arial', '', row2_col_pt,
+                                    pil_font=pil_row2_col, ppi=ppi,
+                                    nudge_y=-(h_mm * 0.03))
+        # Invisible left spacer to keep SKU centred when colour is appended
+        row2_spacer = engine.Spacer(width=row2_col_elem.width, height=0.001)
         row2 = engine.Row(
             align='bottom',
-            spacing=int(canvas.width * 0.000001), # 一点点小间距
+            spacing=0.001,
             children=[
-                # row2_left_spacer, # 左侧隐形配重砖块
-                engine.Text(sku_config.sku_name, font=font_row2_sku),
-                row2_color_element
+                engine.Text(sku_config.sku_name, 'ArialBlack', '', row2_sku_pt,
+                            pil_font=pil_row2_sku, ppi=ppi),
+                row2_col_elem,
             ]
         )
-        
-        # 3.3 第三排：左边提示文字 + 右边黑框白字
-        box_text_left = f"{sku_config.box_number['total_boxes']} Boxes in Total, May Deliver Separately."
-        box_text_right = f"Box {sku_config.box_number['current_box']} of {sku_config.box_number['total_boxes']}"
-        box_padding = int(0.6 * sku_config.dpi) # 黑框内边距
-        
+
+        # ---- Row 3: left text + right "Box X of Y" (black bg) ----
+        box_text_left  = (f"{sku_config.box_number['total_boxes']} Boxes in Total, "
+                          f"May Deliver Separately.")
+        box_text_right = (f"Box {sku_config.box_number['current_box']} of "
+                          f"{sku_config.box_number['total_boxes']}")
         row3 = engine.Row(
             align='center',
-            spacing=int(canvas.width * 0.01),
+            spacing=w_mm * 0.01,
             children=[
-                engine.Text(box_text_left, font=font_row3),
-                engine.Text(
-                    box_text_right,
-                    font=font_row3_bold,
-                    color=sku_config.background_color, # 牛皮纸色文字
-                    draw_background=True,
-                    background_color='black',
-                    padding=box_padding,
-                    border_radius=int(canvas.height * 0.02),
-                    nudge_x=-box_padding, # 让背景框紧贴文字，向左微调
-                    nudge_y=-box_padding - int(canvas.height * 0.01) # 向上微调，让背景框紧贴文字
-                
-                )
+                engine.Text(box_text_left, 'Arial', '', row3_pt,
+                            pil_font=pil_row3, ppi=ppi),
+                engine.Text(box_text_right, 'Arial', 'B', row3_pt,
+                            pil_font=pil_row3_bold, ppi=ppi,
+                            color=sku_config.background_color,
+                            draw_background=True, background_color=(0, 0, 0),
+                            border_radius=box_radius,
+                            padding=box_pad_mm,
+                            nudge_x=-(box_pad_mm + w_mm * 0.02),
+                            nudge_y=-(box_pad_mm + h_mm * 0.01)),
             ]
         )
-        
-        # 把三排文字打包成一个靠左对齐的垂直容器
-        middle_column = engine.Column(
+
+        middle_col = engine.Column(
             align='left',
-            spacing=int(canvas.height * 0.10), # 三排文字之间的行间距
-            children=[row1, row2, row3]
+            spacing=spacing_mm,
+            children=[row1_elem, row2, row3],
         )
 
-        # ================= 4. 组装最外层大管家 (Row) =================
-        icon_logo = self.resources['icon_logo']
-        icon_company = self.resources['icon_company']
-        
-        # 左右 Logo，根据设计图估算一下宽度比例
-        left_logo = engine.Image(icon_logo, width=int(canvas.width * 0.15))
-        right_logo = engine.Image(icon_company, width=int(canvas.width * 0.18))
-        
-        side_padding = int(2.5 * sku_config.dpi) # 左右安全边距
-        
-        main_panel = engine.Row(
-            fixed_width=canvas.width,
-            fixed_height=canvas.height,
-            justify='space-between', # 两端对齐魔法，把左右 Logo 顶到两边
-            align='center',          # 整体垂直居中
-            padding_x=side_padding,  # 只设左右 padding，因为已经锁死了 height，不需要上下 padding
+        main_row = engine.Row(
+            fixed_width=w_mm,
+            fixed_height=h_mm,
+            justify='space-between',
+            align='center',
+            padding_x=side_pad_mm,
             children=[
-                left_logo,
-                middle_column,
-                right_logo
+                engine.Image(self.resources['icon_logo'], width=logo_w_mm),
+                middle_col,
+                engine.Image(self.resources['icon_company'], width=company_w_mm),
             ]
         )
 
-        # ================= 5. 一键渲染 =================
-        main_panel.layout(0, 0)
-        main_panel.render(draw)
-       
-        
-        # 前后侧面板是一样的，只是旋转180度
-        canvas_front_side = canvas.copy()
-        canvas_back_side = canvas_front_side.rotate(180)
-        
-        return canvas_front_side, canvas_back_side
-    
-    
-    
-    def generate_exacme_left_and_right_side(self, sku_config):
-        """
-        生成 Exacme 方形蹦床天地盖样式的左右侧面板
-        策略：先创建一个横向的画布 (Width x Height) 进行绘制，
-        绘制完成后，分别旋转 90度和 -90度 得到左右侧板。
-        """ 
+        def _render():
+            main_row.layout(x_mm, y_mm)
+            main_row.render(pdf)
 
-        # 建立横向画布 (宽=箱子宽w_px, 高=箱子高h_px)
-        # 注意：这里宽高是反直觉的，因为我们是在“横着”画侧面
-        canvas_w = sku_config.w_px
-        canvas_h = sku_config.h_px
-        
-        canvas = Image.new(sku_config.color_mode, (canvas_w, canvas_h), sku_config.background_color)
-        # draw = ImageDraw.Draw(canvas)
-        
-        if sku_config.l_cm > 130 and sku_config.w_cm < 40:
-            """
-                依据长宽条件选择高竖标签还是宽横标签：
-                长大于130cm且宽小于40cm的，使用高竖标签；其他情况使用宽横标签。
-                这个条件是根据 Exacme 的设计图和实际产品尺寸总结出来的经验规则，目的是让标签在侧面看起来更协调。
-            """
-            print("使用高竖标签")
-            img_label_filled = self.fill_left_and_right_label_high(sku_config, self.resources['icon_side_label_high'], self.font_paths)
+        if rotate_180:
+            cx = x_mm + w_mm / 2.0
+            cy = y_mm + h_mm / 2.0
+            with pdf.rotation(180, cx, cy):
+                _render()
         else:
-            print("使用宽横标签")
-            img_label_filled = self.fill_left_and_right_label_wide(sku_config, self.resources['icon_side_label_wide'], self.font_paths)
+            _render()
 
-        """填充 Exacme 天地盖样式左右侧面板的标签区域"""
-        
-        img_label_filled_target_width = int(canvas.width * 0.9) # 标签占侧身宽度的90%，留一点边距
-        img_label_filled_target_resized = img_label_filled.resize((img_label_filled_target_width, int(img_label_filled.height * (img_label_filled_target_width / img_label_filled.width))), Image.Resampling.LANCZOS)   
-        
-        general_functions.paste_image_center_with_heightorwidth(canvas, img_label_filled_target_resized, y_offset=int(canvas.height * 0.05)) # 标签距离顶部5%的位置
-        
-        # 关键步骤：expand=True 会自动交换宽高，变成竖长的面板
-        # 左侧面板：文字通常朝左 (顺时针旋转 90度)
-        # 依据展开图逻辑，左侧面板的“底”是指向中心的，所以文字应该是“躺着”的
-        canvas_left_side = canvas.rotate(-90, expand=True)
-        
-        # 右侧面板：文字通常朝右 (逆时针旋转 90度 )
-        canvas_right_side = canvas.rotate(90, expand=True)
-        
-        return canvas_left_side, canvas_right_side
-        
-    
-    def generate_exacme_top_panel(self, sku_config):
-        '''生成 Exacme 方形蹦床天地盖样式的顶部面板'''
-        canvas = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.w_px), sku_config.background_color)
-        draw = ImageDraw.Draw(canvas)
-        
-        # ================= 1. 顶部：天平布局 (Logo居中，右侧尺寸框) =================
-        icon_logo = self.resources['icon_logo']
-        logo_img = engine.Image(icon_logo, width=int(canvas.width * 0.22)) # Logo占宽22%
-        
-        # 尝试从 SKU_name 中提取尺寸 (例如: 6184-H812B-1 -> 8x12FT, 6184-H81B-1 -> 8x10FT)
-        size_text = "SIZE" # 兜底文字
-        
-        # 正则魔法：找字母 H (忽略大小写)，后面跟着 1个数字，然后再跟着 1到2个数字
-        match = re.search(r'H(\d)(\d{1,2})', sku_config.sku_name, re.IGNORECASE)
-        
-        if match:
-            dim1 = match.group(1)  # 第一位数字，例如 '8'
-            dim2 = match.group(2)  # 第二/三位数字，例如 '12' 或者 '1'
-            
-            # 触发特殊隐藏规则：如果没有第三位数字，且第二位是 '1'，那它其实代表 '10'
-            if dim2 == '1':
-                dim2 = '10'
-                
-            # 拼接成最终需要的字符串
-            size_text = f"{dim1}x{dim2}FT"
-            
-        font_size_top = int(canvas.height * 0.05) # 尺寸文字占高5%
-        font_top = ImageFont.truetype(self.font_paths['Arial Bold'], font_size_top)
-        
-        box_internal_padding = int(0.8 * sku_config.dpi)
-        box_radius = int(canvas.height * 0.05)
-        
-        # 右上角的黑色倒角尺寸框
+    def _draw_top_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
+        """绘制顶面（l×w）。"""
+        ppi = sku_config.ppi
+        px_per_mm = ppi / 25.4
+
+        size_text    = self._extract_size_text(sku_config.sku_name)
+        top_pad_mm   = 20.0  # 2 cm
+
+        # ── 1. 顶部行：Logo（居中）+ 右侧尺寸框 ────────────────────────────────
+        font_top_px   = int(h_mm * 0.05 * px_per_mm)
+        font_top_pt   = font_top_px * 72.0 / ppi
+        pil_top       = ImageFont.truetype(self.font_paths['Arial Bold'], font_top_px)
+
+        box_int_pad   = 8.0   # 0.8 cm
+        box_radius    = h_mm * 0.05
+
+        logo_img = engine.Image(self.resources['icon_logo'], width=w_mm * 0.22)
+
         size_box = engine.Text(
-            size_text,
-            font=font_top,
-            color=sku_config.background_color, # 文字颜色为背景的牛皮纸色
-            padding=box_internal_padding,
-            draw_background=True,
-            background_color='black',
+            size_text, 'Arial', 'B', font_top_pt,
+            pil_font=pil_top, ppi=ppi,
+            color=sku_config.background_color,
+            draw_background=True, background_color=(0, 0, 0),
             border_radius=box_radius,
-            nudge_x=-box_internal_padding - int(canvas.width * 0.02), # 让背景框紧贴文字，向左微调
-            nudge_y=-box_internal_padding  # 向上微调，让背景框紧贴文字
-            
+            padding=box_int_pad,
+            nudge_x=-(box_int_pad + w_mm * 0.02),
+            nudge_y=-box_int_pad,
         )
-
-        top_padding = int(2 * sku_config.dpi) 
 
         top_row = engine.Row(
-            fixed_width=canvas.width,
+            fixed_width=w_mm,
             justify='space-between',
             align='top',
-            padding_x=top_padding, # 左右安全距离
-            padding_y=top_padding, # 顶部安全距离
+            padding_x=top_pad_mm,
+            padding_y=top_pad_mm,
             children=[
-                engine.Spacer(width=size_box.width, height=1), # 左侧隐形配重砖块
-                logo_img,                                      # 绝对居中的主角 Logo
-                size_box                                       # 右侧的小尾巴
+                engine.Spacer(width=size_box.width, height=0.001),
+                logo_img,
+                size_box,
             ]
         )
 
-        # ================= 2. 中间：条件判定替换信息图 =================
-        # 依据长宽条件选择垂直或水平的图标
+        # ── 2. 中间：依据尺寸选图 ──────────────────────────────────────────────
         if sku_config.l_cm > 130 and sku_config.w_cm < 40:
-            
-            icon_middle_ori = self.resources['icon_middle_info_horizontal']
-            # 中间信息图宽度大约占画布的 55%
-            middle_img = engine.Image(icon_middle_ori, width=int(canvas.width * 0.93), nudge_y=int(canvas.height * 0.04)) # 水平图需要往下微调，让它看起来更靠近底部
-            
-            # 【魔法降临：计算绝对居中的动态间距】
-            # 2.1 我们的目标：让 middle_img 的顶部，刚好落在需要的那个 Y 坐标上
-            target_y = (canvas.height - middle_img.height) // 2 + int(canvas.height * 0.06) # 目标位置：绝对居中 + 向下微调3%高度，让它看起来更靠近底部
-            
-            # 2.2 我们算一下，在它上面，已经有哪些东西占据了空间？
-            # 占据的空间 = safe_area 顶部的内边距 + top_row 自己算出来的真实总高度
-            occupied_top_space = top_padding + top_row.height
-            
-            # 2.3 目标高度 - 被占据的高度 = 我们需要的间距！
-            dynamic_spacing = target_y - occupied_top_space
-            
-            # 2.4 设一个防爆底线（万一图纸特别矮，防止算出来是负数导致元素重叠）
-            safe_spacing = max(dynamic_spacing, int(canvas.height * 0.03))
-            
+            middle_img = engine.Image(self.resources['icon_middle_info_horizontal'],
+                                      width=w_mm * 0.93,
+                                      nudge_y=h_mm * 0.04)
+            occupied_top = top_pad_mm + top_row.height
+            target_y     = (h_mm - middle_img.height) / 2.0 + h_mm * 0.06
+            safe_spacing = max(target_y - occupied_top, h_mm * 0.03)
         else:
-            icon_middle_ori = self.resources['icon_middle_info_vertical']
-            # 中间信息图宽度大约占画布的 55%
-            middle_img = engine.Image(icon_middle_ori, width=int(canvas.width * 0.53))
-            
-            # 竖版图本身就很高，不需要强行拉开间距，继续用原来的紧凑默认值
-            safe_spacing = int(canvas.height * 0.03)
+            middle_img   = engine.Image(self.resources['icon_middle_info_vertical'],
+                                        width=w_mm * 0.53)
+            safe_spacing = h_mm * 0.03
 
-        # ================= 3. 底部：全宽贴边警示条 =================
-        icon_bottom_ori = self.resources['icon_bottom_info']
-        
-        # 3.1 制作一个纯黑的矩形底板 (宽 = 画布宽，高 = 画布高的 13%)
-        bar_height = int(canvas.height * 0.13)
-        bar_width = canvas.width
-        black_bar = Image.new('RGBA', (bar_width, bar_height), 'black')
-        
-        # 3.2 缩放警示条的图标，让它适应黑框的高度 (让图标占黑框宽度的 80%，留出上下黑边)
-        icon_target_width = int(bar_width * 0.80)
-        icon_target_height = int(icon_bottom_ori.height * (icon_target_width / icon_bottom_ori.width))
-        icon_bottom_resized = icon_bottom_ori.resize((icon_target_width, icon_target_height), Image.Resampling.LANCZOS)
-        
-        # 3.3 把警示图标贴在黑板的正中间 (完美居中计算)
-        paste_x = (bar_width - icon_target_width) // 2
-        paste_y = (bar_height - icon_target_height) // 2
-        black_bar.paste(icon_bottom_resized, (paste_x, paste_y), mask=icon_bottom_resized) # 用 mask 保证透明背景正常显示
-        
-        # 3.4 把它变成引擎可以识别的组件
-        bottom_block = engine.Image(black_bar)
-
-        # ================= 4. 终极防爆大管家 =================
-        top_padding = int(1.5 * sku_config.dpi) # 1.5厘米安全内边距
-        
-        # 为了让顶部的 Logo 和中间的图不贴边，我们给它们单独套一个小盒子加 padding
-        safe_area_column = engine.Column(
-            
+        # ── 3. 底部：全宽黑色警示条 ────────────────────────────────────────────
+        bar_height_mm = h_mm * 0.13
+        bar_icon_w_mm = w_mm * 0.80
+        bar_icon_h_mm, _ = self._img_dims_mm(self.resources['icon_bottom_info'],
+                                              width_mm=bar_icon_w_mm)
+        # 将警示图标嵌入预先绘制的黑条中（通过 Column 合成）
+        # 先绘制黑条，再居中绘制图标
+        black_bar = engine.Column(
+            fixed_width=w_mm,
+            fixed_height=bar_height_mm,
             align='center',
-            spacing = safe_spacing, # 顶部和中间图的间距
-            padding_y=top_padding,             # 上下留出安全距离
+            justify='start',
+            padding=0,
             children=[
-                top_row,
-                middle_img,
+                engine.Image(self.resources['icon_bottom_info'], width=bar_icon_w_mm),
             ]
         )
-        
-        # 最外层大管家：绝对纯洁，padding=0！
-        main_panel = engine.Column(
-            fixed_width=canvas.width,
-            fixed_height=canvas.height,
-            justify='space-between', # 让 safe_area 顶在上面，黑条踩在最底线
-            align='center',          
-            padding=0,               # 【关键】大管家 0 padding，保证黑条 100% 贴边！
-            children=[
-                safe_area_column,    # 上半部分（自带安全区）
-                bottom_block         # 下半部分（全宽黑条，完美贴边）
-            ]
-        )
-        
-        # 5. 一键渲染
-        main_panel.layout(0, 0)
-        main_panel.render(draw)
-        
-        canvas_top = canvas
-        return canvas_top
-    
-    
-    def fill_left_and_right_label_wide(self, sku_config, img_label, fonts_paths):
-        """
-        填充 Exacme 天地盖样式左右侧面板的宽标签区域
-        使用 generate_barcode_image 生成纯条形码，然后手动绘制文字
-        """
-        # 【救命级修复】一定要 copy！否则会污染资源字典里的原图模板！
-        icon_side_label = img_label.copy()
-        draw = ImageDraw.Draw(icon_side_label)
-        
-        # 1. 动态基础尺寸
-        content_w = int(icon_side_label.width * 0.95)  
-        content_h = int(icon_side_label.height * 0.78)
-        
-        # 2. 准备所有需要的字体
-        font_size_huge = int(content_h * 0.5088) 
-        font_huge = ImageFont.truetype(fonts_paths['Arial Black'], font_size_huge)
-        
-        font_size_box = int(content_h * 0.18)
-        font_box = ImageFont.truetype(fonts_paths['Arial Bold'], font_size_box)
-        
-        font_size_info = int(content_h * 0.14)
-        font_info_bold = ImageFont.truetype(fonts_paths['Arial Bold'], font_size_info)
-        font_info_regular = ImageFont.truetype(fonts_paths['Arial Regular'], font_size_info) # 新增常规体
-        
-        font_size_barcode = int(content_h * 0.08)
-        font_barcode = ImageFont.truetype(fonts_paths['Arial Regular'], font_size_barcode)
 
-        # ================= 3. 组装第一排：SKU 和 箱数 =================
-        box_text = f"Box {sku_config.box_number['current_box']} of {sku_config.box_number['total_boxes']}"
-        box_padding = int(0.26 * sku_config.dpi) 
-        
+        # ── 4. 整体布局 ─────────────────────────────────────────────────────────
+        safe_area = engine.Column(
+            align='center',
+            spacing=safe_spacing,
+            padding_y=top_pad_mm,
+            children=[top_row, middle_img],
+        )
+
+        main_col = engine.Column(
+            fixed_width=w_mm,
+            fixed_height=h_mm,
+            justify='space-between',
+            align='center',
+            padding=0,
+            children=[safe_area, black_bar],
+        )
+
+        # 绘制主体布局
+        main_col.layout(x_mm, y_mm)
+        main_col.render(pdf)
+
+        # 黑条背景（黑色，全宽，贴底）
+        bar_y = y_mm + h_mm - bar_height_mm
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(x_mm, bar_y, w_mm, bar_height_mm, style='F')
+        # 在黑条内居中绘制警示图标
+        icon_x = x_mm + (w_mm - bar_icon_w_mm) / 2.0
+        icon_y = bar_y + (bar_height_mm - bar_icon_h_mm) / 2.0
+        pdf.image(self.resources['icon_bottom_info'],
+                  x=icon_x, y=icon_y, w=bar_icon_w_mm, h=bar_icon_h_mm)
+
+    def _draw_side_panel(self, pdf: FPDF, sku_config,
+                          x_mm, y_mm, w_mm, h_mm, rotation_deg):
+        """
+        绘制左/右侧面板。
+
+        页面上面板尺寸：w_mm = h_cm×10，h_mm = w_cm×10
+        自然画布（旋转前）：nat_w = h_mm，nat_h = w_mm
+        """
+        nat_w = h_mm
+        nat_h = w_mm
+
+        cx = x_mm + w_mm / 2.0
+        cy = y_mm + h_mm / 2.0
+        nat_x = cx - nat_w / 2.0
+        nat_y = cy - nat_h / 2.0
+
+        # 选择宽标签或高标签
+        use_high = sku_config.l_cm > 130 and sku_config.w_cm < 40
+
+        if use_high:
+            label_src = self.resources['icon_side_label_high']
+        else:
+            label_src = self.resources['icon_side_label_wide']
+
+        # 标签目标宽度 = 90% 自然宽
+        lbl_w_mm = nat_w * 0.9
+        lbl_h_mm, _ = self._img_dims_mm(label_src, width_mm=lbl_w_mm)
+
+        if use_high:
+            # 高标签在 PIL 中需先旋转 -90°；在 fpdf2 中以横向展示：
+            # 使用原图的转置宽高来正确放置
+            with Image.open(label_src) as _img:
+                orig_w, orig_h = _img.size
+            # 旋转后纵横比 = orig_h / orig_w（宽变高互换）
+            lbl_h_mm = lbl_w_mm * orig_w / orig_h
+
+        lbl_x = nat_x + (nat_w - lbl_w_mm) / 2.0
+        lbl_y = nat_y + nat_h * 0.05
+
+        with pdf.rotation(rotation_deg, cx, cy):
+            if use_high:
+                # 将高标签旋转为横向后作为 PIL Image 传入
+                lbl_pil = Image.open(label_src).rotate(-90, expand=True)
+                pdf.image(lbl_pil, x=lbl_x, y=lbl_y, w=lbl_w_mm, h=lbl_h_mm)
+                self._draw_side_label_high_content(
+                    pdf, sku_config, lbl_x, lbl_y, lbl_w_mm, lbl_h_mm)
+            else:
+                pdf.image(label_src, x=lbl_x, y=lbl_y, w=lbl_w_mm, h=lbl_h_mm)
+                self._draw_side_label_wide_content(
+                    pdf, sku_config, lbl_x, lbl_y, lbl_w_mm, lbl_h_mm)
+
+    def _draw_side_label_wide_content(self, pdf: FPDF, sku_config,
+                                       lbl_x, lbl_y, lbl_w, lbl_h):
+        """在宽标签上叠加绘制文字、条形码（fpdf2 版）。"""
+        ppi = sku_config.ppi
+        px_per_mm = ppi / 25.4
+
+        content_w = lbl_w * 0.95
+        content_h = lbl_h * 0.78
+
+        # 字体大小（比例于 content_h）
+        huge_px   = int(content_h * 0.5088 * px_per_mm)
+        box_px    = int(content_h * 0.18   * px_per_mm)
+        info_px   = int(content_h * 0.14   * px_per_mm)
+        bc_px     = int(content_h * 0.08   * px_per_mm)
+
+        pil_huge  = ImageFont.truetype(self.font_paths['Arial Black'], huge_px)
+        pil_box   = ImageFont.truetype(self.font_paths['Arial Bold'],  box_px)
+        pil_bold  = ImageFont.truetype(self.font_paths['Arial Bold'],  info_px)
+        pil_reg   = ImageFont.truetype(self.font_paths['Arial'],       info_px)
+        pil_bc    = ImageFont.truetype(self.font_paths['Arial'],       bc_px)
+
+        huge_pt = huge_px * 72.0 / ppi
+        box_pt  = box_px  * 72.0 / ppi
+        info_pt = info_px * 72.0 / ppi
+        bc_pt   = bc_px   * 72.0 / ppi
+
+        box_pad  = 0.26 * 10   # 2.6 mm
+
+        # ── Row 1：SKU（huge）+ 箱数黑框 ────────────────────────────────────────
+        box_txt = (f"Box {sku_config.box_number['current_box']} of "
+                   f"{sku_config.box_number['total_boxes']}")
         row1 = engine.Row(
             fixed_width=content_w,
-            justify='space-between', 
-            align='center', 
+            justify='space-between',
+            align='center',
             children=[
-                engine.Text(sku_config.sku_name, font=font_huge),
-                engine.Text(
-                    box_text, 
-                    font=font_box, 
-                    color=sku_config.background_color, 
-                    draw_background=True,
-                    background_color='black',
-                    border_radius=0,                   
-                    padding=box_padding,
-                    nudge_x=-box_padding - int(content_w * 0.02), # 向左微调，让黑框右边缘紧贴下方图标，同时留出一点点间距让它不至于太挤
-                    nudge_y=-box_padding
-                )
+                engine.Text(sku_config.sku_name, 'ArialBlack', '', huge_pt,
+                            pil_font=pil_huge, ppi=ppi),
+                engine.Text(box_txt, 'Arial', 'B', box_pt,
+                            pil_font=pil_box, ppi=ppi,
+                            color=sku_config.background_color,
+                            draw_background=True, background_color=(0, 0, 0),
+                            border_radius=0.0,
+                            padding=box_pad,
+                            nudge_x=-(box_pad + content_w * 0.02),
+                            nudge_y=-box_pad),
             ]
         )
 
-        # ================= 4. 组装第二排：文字信息 和 双条码 =================
-        # 4.1 左侧：重量与尺寸垂直排列 (粗细拆分 + 完美对齐)
-        gw_label = "G.W./N.W. : "
+        # ── Row 2 左：重量和尺寸信息 ────────────────────────────────────────────
+        gw_label  = "G.W./N.W. : "
         box_label = "BOX SIZE : "
-        
-        # 量一下两个粗体标签的真实宽度
-        gw_w = font_info_bold.getbbox(gw_label)[2] - font_info_bold.getbbox(gw_label)[0]
-        box_w = font_info_bold.getbbox(box_label)[2] - font_info_bold.getbbox(box_label)[0]
-        
+        gw_bbox   = pil_bold.getbbox(gw_label, anchor='ls')
+        box_bbox  = pil_bold.getbbox(box_label, anchor='ls')
+        gw_w_px   = gw_bbox[2]  - gw_bbox[0]
+        box_w_px  = box_bbox[2] - box_bbox[0]
+        indent_w  = max(0.0, (gw_w_px - box_w_px) / px_per_mm)
+
         row_gw = engine.Row(
-            align='bottom',
-            spacing=10,
+            align='bottom', spacing=10.0 / px_per_mm,
             children=[
-                engine.Text(gw_label, font=font_info_bold),
-                engine.Text(f"{sku_config.side_text['gw_value']} / {sku_config.side_text['nw_value']} LBS", font=font_info_regular)
+                engine.Text(gw_label, 'Arial', 'B', info_pt, pil_font=pil_bold, ppi=ppi),
+                engine.Text(
+                    (f"{sku_config.side_text['gw_value']} / "
+                     f"{sku_config.side_text['nw_value']} LBS"),
+                    'Arial', '', info_pt, pil_font=pil_reg, ppi=ppi),
             ]
         )
-        
         row_box = engine.Row(
-            align='bottom',
-            spacing=10,
+            align='bottom', spacing=10.0 / px_per_mm,
             children=[
-                engine.Text(box_label, font=font_info_bold),
-                engine.Spacer(width=gw_w - box_w, height=1), # 填补宽度差，让后面的数值完美对齐！
-                engine.Text(f"{sku_config.l_in:.1f}\" x {sku_config.w_in:.1f}\" x {sku_config.h_in:.1f}\"", font=font_info_regular)
+                engine.Text(box_label, 'Arial', 'B', info_pt, pil_font=pil_bold, ppi=ppi),
+                engine.Spacer(width=indent_w, height=0.001),
+                engine.Text(
+                    (f"{sku_config.l_in:.1f}\" x "
+                     f"{sku_config.w_in:.1f}\" x {sku_config.h_in:.1f}\""),
+                    'Arial', '', info_pt, pil_font=pil_reg, ppi=ppi),
             ]
+        )
+        info_col = engine.Column(
+            align='left',
+            spacing=content_h * 0.08,
+            children=[row_gw, row_box],
         )
 
-        info_column = engine.Column(
-            align='left',
-            spacing=int(content_h * 0.08), 
-            children=[row_gw, row_box]
-        )
-        
-        # 4.2 右侧：生成双条码
-        barcode_h = int(content_h * 0.28)
-        barcode_w_sku = int(barcode_h * 3.5) 
-        barcode_w_sn = int(barcode_h * 2.7) 
-        
-        img_barcode_sku = general_functions.generate_barcode_image(sku_config.sku_name, width=barcode_w_sku, height=barcode_h)
-        img_barcode_sn = general_functions.generate_barcode_image(sku_config.side_text['sn_code'], width=barcode_w_sn, height=barcode_h)
-        
-        barcode_col_left = engine.Column(
-            align='center',
-            spacing=int(content_h * 0.02),
+        # ── Row 2 右：双条码 ─────────────────────────────────────────────────────
+        bc_h_mm     = content_h * 0.28
+        bc_w_sku_mm = bc_h_mm * 3.5
+        bc_w_sn_mm  = bc_h_mm * 2.7
+
+        img_bc_sku = generate_barcode_image(sku_config.sku_name,
+                                            int(bc_w_sku_mm * px_per_mm),
+                                            int(bc_h_mm * px_per_mm))
+        img_bc_sn  = generate_barcode_image(sku_config.side_text['sn_code'],
+                                            int(bc_w_sn_mm * px_per_mm),
+                                            int(bc_h_mm * px_per_mm))
+
+        bc_col_left = engine.Column(
+            align='center', spacing=content_h * 0.02,
             children=[
-                engine.Image(img_barcode_sku),
-                engine.Text(sku_config.sku_name, font=font_barcode)
+                engine.Image(self._barcode_on_white(img_bc_sku)),
+                engine.Text(sku_config.sku_name, 'Arial', '', bc_pt,
+                            pil_font=pil_bc, ppi=ppi),
             ]
         )
-        barcode_col_right = engine.Column(
-            align='center',
-            spacing=int(content_h * 0.02),
+        bc_col_right = engine.Column(
+            align='center', spacing=content_h * 0.02,
             children=[
-                engine.Image(img_barcode_sn),
-                engine.Text(sku_config.side_text['sn_code'], font=font_barcode)
+                engine.Image(self._barcode_on_white(img_bc_sn)),
+                engine.Text(sku_config.side_text['sn_code'], 'Arial', '', bc_pt,
+                            pil_font=pil_bc, ppi=ppi),
             ]
         )
-        
-        barcodes_row = engine.Row(
-            spacing=int(content_w * 0.014), 
-            align='bottom',
-            children=[barcode_col_left, barcode_col_right]
+        bc_row = engine.Row(
+            spacing=content_w * 0.014, align='bottom',
+            children=[bc_col_left, bc_col_right],
         )
-        
-        # 4.3 组装完整的第二排
+
         row2 = engine.Row(
             fixed_width=content_w,
             justify='start',
-            spacing=int(content_w * 0.02),   # 文字和条码之间固定间距
-            align='center', 
-            children=[
-                info_column,
-                barcodes_row
-            ]
+            spacing=content_w * 0.02,
+            align='center',
+            children=[info_col, bc_row],
         )
 
-        # ================= 5. 总管家合体与居中渲染 =================
+        # ── 总体布局 ─────────────────────────────────────────────────────────────
         main_panel = engine.Column(
             align='left',
-            spacing=int(content_h * 0.11), 
-            children=[
-                row1, 
-                row2
-            ]
+            spacing=content_h * 0.11,
+            children=[row1, row2],
         )
-        
-        main_panel.layout(0, 0)
-        
-        start_x = (icon_side_label.width - content_w) // 2
-        start_y = int(icon_side_label.height * 0.11) 
-        
+        start_x = lbl_x + (lbl_w - content_w) / 2.0
+        start_y = lbl_y + lbl_h * 0.11
         main_panel.layout(start_x, start_y)
-        main_panel.render(draw)
-        
-        # icon_side_label.show()
-        
-        return icon_side_label
-    
-    def fill_left_and_right_label_high(self, sku_config, img_label, fonts_paths):
-        """填充 Exacme 天地盖样式左右侧面板的高标签区域
-        使用 generate_barcode_image 生成纯条形码，然后手动绘制文字
+        main_panel.render(pdf)
+
+    def _draw_side_label_high_content(self, pdf: FPDF, sku_config,
+                                       lbl_x, lbl_y, lbl_w, lbl_h):
         """
-        
-        icon_side_label_ori = img_label
-        # 这个面板就只放一个侧唛标签，调整它的大小，让它占满整个侧身, 所以就不单独放到一个函数里生成图片，也不用放到容器里了
-        icon_side_label = icon_side_label_ori.rotate(-90, expand=True) # 先旋转90度，让它变成长条形，方便后续调整宽度占满整个侧身
+        在高标签（旋转后横向）上叠加绘制文字和条形码（fpdf2 版）。
+        坐标以标签横向渲染后的左上角 (lbl_x, lbl_y) 为原点。
+        """
+        ppi = sku_config.ppi
+        px_per_mm = ppi / 25.4
 
-        # 把icon_side_label作为一个新的canvas
-        draw = ImageDraw.Draw(icon_side_label)
-        
-        ############ 左侧文字区 ############
-        # 1. 准备字体
-        font_size_bold = int(icon_side_label.height * 0.052) # 字体大小占侧身高度的 5%
-        font_size_normal = int(icon_side_label.height * 0.043) # 字体大小占侧身高度的 4%
-        
-        font_bold = ImageFont.truetype(fonts_paths['Arial Bold'], font_size_bold)
-        font_normal = ImageFont.truetype(fonts_paths['Arial Regular'], font_size_normal)
+        # 字体大小（比例于 lbl_h）
+        bold_px   = int(lbl_h * 0.052 * px_per_mm)
+        normal_px = int(lbl_h * 0.043 * px_per_mm)
 
-        # 2. 像串糖葫芦一样拼装每一行 (Row)
-        row_color = engine.Row(
-            spacing=10, # 粗体和细体中间隔 10 个像素
-            children=[
-                engine.Text("COLOUR  :", font=font_bold),
-                engine.Text(sku_config.color, font=font_normal) # 动态颜色
-            ]
-        )
+        pil_bold   = ImageFont.truetype(self.font_paths['Arial Bold'], bold_px)
+        pil_normal = ImageFont.truetype(self.font_paths['Arial'], normal_px)
 
-        row_weight_lbs = engine.Row(
-            spacing=10,
-            children=[
-                engine.Text("G.W./N.W. :", font=font_bold),
-                engine.Text(f"{sku_config.side_text['gw_value']} / {sku_config.side_text['nw_value']} LBS", font=font_normal)
-            ]
-        )
+        bold_pt   = bold_px   * 72.0 / ppi
+        normal_pt = normal_px * 72.0 / ppi
 
-        # 【小魔法】：对于第二行需要缩进的 KG 重量，
-        # 你可以直接塞一个不可见的 Element 进去当“隐形砖块”占位！
-        # 先获取 "G.W./N.W. :" 这串字在当前动态字号下的真实包围盒
-        gw_bbox = font_bold.getbbox("G.W./N.W. :")
-        # 真实宽度 = 右边界 - 左边界
-        gw_text_width = gw_bbox[2] - gw_bbox[0] 
-        
-        # 制造一个绝对精准的隐形砖块！
-        indent_spacer = engine.Spacer(width=gw_text_width, height=1)
+        spacing_px = 25  # 行间距（原始 px），换算为 mm
+        spacing_mm = spacing_px / px_per_mm
+        row_spacing = 10.0 / px_per_mm  # Row 内元素水平间距
 
-        row_weight_kg = engine.Row(
-            spacing=10,
-            children=[
-                indent_spacer, # 隐形砖块在左边顶着
-                engine.Text(f"{sku_config.side_text['gw_value']/ 2.20462:.1f} / {sku_config.side_text['nw_value']/ 2.20462:.1f} KG", font=font_normal)
-            ]
-        )
+        gw_bbox = pil_bold.getbbox("G.W./N.W. :", anchor='ls')
+        gw_indent_mm = (gw_bbox[2] - gw_bbox[0]) / px_per_mm
 
-        row_box_size_inch = engine.Row(
-            spacing=10,
-            children=[
-                engine.Text("BOX SIZE :", font=font_bold),
-                engine.Text(f"{sku_config.l_cm/2.54:.1f}\" x {sku_config.w_cm/2.54:.1f}\" x {sku_config.h_cm/2.54:.1f}\"", font=font_normal)
-            ]
-        )
-        
-        row_box_size_cm = engine.Row(
-            spacing=10,
-            children=[
-                indent_spacer, # 同样的隐形砖块，保持和重量信息的对齐
-                engine.Text(f"{sku_config.l_cm:.1f}cm x {sku_config.w_cm:.1f}cm x {sku_config.h_cm:.1f}cm", font=font_normal)
-            ]
-        )
-
-        # 3. 把所有行装进大垂直容器 (Column)
+        # ── 左侧文字块 ──────────────────────────────────────────────────────────
+        row_color = engine.Row(spacing=row_spacing, children=[
+            engine.Text("COLOUR  :", 'Arial', 'B', bold_pt, pil_font=pil_bold, ppi=ppi),
+            engine.Text(sku_config.color, 'Arial', '', normal_pt, pil_font=pil_normal, ppi=ppi),
+        ])
+        row_weight_lbs = engine.Row(spacing=row_spacing, children=[
+            engine.Text("G.W./N.W. :", 'Arial', 'B', bold_pt, pil_font=pil_bold, ppi=ppi),
+            engine.Text(
+                (f"{sku_config.side_text['gw_value']} / "
+                 f"{sku_config.side_text['nw_value']} LBS"),
+                'Arial', '', normal_pt, pil_font=pil_normal, ppi=ppi),
+        ])
+        row_weight_kg = engine.Row(spacing=row_spacing, children=[
+            engine.Spacer(width=gw_indent_mm, height=0.001),
+            engine.Text(
+                (f"{sku_config.side_text['gw_value'] / 2.20462:.1f} / "
+                 f"{sku_config.side_text['nw_value'] / 2.20462:.1f} KG"),
+                'Arial', '', normal_pt, pil_font=pil_normal, ppi=ppi),
+        ])
+        row_box_inch = engine.Row(spacing=row_spacing, children=[
+            engine.Text("BOX SIZE :", 'Arial', 'B', bold_pt, pil_font=pil_bold, ppi=ppi),
+            engine.Text(
+                (f"{sku_config.l_cm/2.54:.1f}\" x "
+                 f"{sku_config.w_cm/2.54:.1f}\" x {sku_config.h_cm/2.54:.1f}\""),
+                'Arial', '', normal_pt, pil_font=pil_normal, ppi=ppi),
+        ])
+        row_box_cm = engine.Row(spacing=row_spacing, children=[
+            engine.Spacer(width=gw_indent_mm, height=0.001),
+            engine.Text(
+                (f"{sku_config.l_cm:.1f}cm x "
+                 f"{sku_config.w_cm:.1f}cm x {sku_config.h_cm:.1f}cm"),
+                'Arial', '', normal_pt, pil_font=pil_normal, ppi=ppi),
+        ])
         left_text_block = engine.Column(
-            align='left',  # 【关键】所有行统一靠左对齐
-            spacing=25,    # 行与行之间的上下间距
-            children=[
-                row_color,
-                row_weight_lbs,
-                row_weight_kg,
-                row_box_size_inch,
-                row_box_size_cm
-            ]
+            align='left', spacing=spacing_mm,
+            children=[row_color, row_weight_lbs, row_weight_kg,
+                      row_box_inch, row_box_cm],
         )
+        # 原代码：layout(x=26, y=250) px → mm
+        left_text_block.layout(lbl_x + 26.0 / px_per_mm, lbl_y + 250.0 / px_per_mm)
+        left_text_block.render(pdf)
 
-        # ================= 渲染 =================
-        # 最后，只需指定这个大方块的左上角起点，一键渲染！
-        left_text_block.layout(x=26, y=250) 
-        left_text_block.render(draw)
-        
-        
-        ############ 顶部SKU_name 和 箱号区 ############
-        text_sku_name = sku_config.sku_name
-        text_box_number = f"Box {sku_config.box_number['current_box']} of {sku_config.box_number['total_boxes']}"
-        # sku_name字号占侧身宽度的 78%
-        font_sku_name_target_width = int(icon_side_label.width * 0.670)
-        font_box_number_target_width = int(icon_side_label.width * 0.30)
-        
-        font_size_sku_name = general_functions.get_max_font_size(text_sku_name, self.font_paths['Arial Regular'], font_sku_name_target_width) # 获取最大字号 
-        font_size_box_number = general_functions.get_max_font_size(text_sku_name, self.font_paths['Arial Bold'], font_box_number_target_width) # 获取最大字号
-        
-        font_sku_name = ImageFont.truetype(self.font_paths['Arial Bold'], font_size_sku_name)
-        font_box_number = ImageFont.truetype(self.font_paths['Arial Regular'], font_size_box_number) # 箱号和 SKU_name 字体大小一致，但使用常规体
-        
-        ## 直接渲染在侧唛标签的顶部中心位置
-        # bbox = draw.textbbox((0, 0), text_sku_name, font=font_sku_name)
-        # text_width = bbox[2] - bbox[0]
-        # text_x = (icon_side_label.width - text_width) / 2
-        # text_y = -bbox[1] + 20  # 用字体内部偏移抵消，让文字真正贴顶
-        # draw.text((text_x, text_y), text_sku_name, font=font_sku_name, fill=(0, 0, 0, 0)) # 颜色为透明色，用背景色填充，达到隐藏文字的效果
-        
-        sku_name_block = engine.Text(text_sku_name, font=font_sku_name, color=sku_config.background_color) # 颜色为背景色，达到隐藏文字的效果
-        box_number_block = engine.Text(text_box_number, font=font_box_number, color=sku_config.background_color) # 颜色为背景色，达到隐藏文字的效果
-        
-        spacing_top_text_block = int(icon_side_label.width * 0.7) # 顶部安全距离
-        
-        padding_x_top_text_block = int(icon_side_label.height * 0.12) # 左右安全距离
-        padding_y_top_text_block = int(icon_side_label.height * 0.06) # 顶部安全距离
-        top_text_block = engine.Row(
+        # ── 顶部 SKU + 箱号（透明文字，叠在标签已有的暗色区域，用背景色绘制）──
+        sku_target_w  = lbl_w * 0.670
+        box_target_w  = lbl_w * 0.30
+
+        sku_name_px  = general_functions.get_max_font_size(
+            sku_config.sku_name, self.font_paths['Arial Bold'], int(sku_target_w * px_per_mm))
+        box_num_px   = general_functions.get_max_font_size(
+            sku_config.sku_name, self.font_paths['Arial Bold'], int(box_target_w * px_per_mm))
+
+        pil_sku_name  = ImageFont.truetype(self.font_paths['Arial Bold'], sku_name_px)
+        pil_box_num   = ImageFont.truetype(self.font_paths['Arial'], box_num_px)
+        sku_name_pt   = sku_name_px * 72.0 / ppi
+        box_num_pt    = box_num_px  * 72.0 / ppi
+
+        box_number_text = (f"Box {sku_config.box_number['current_box']} of "
+                           f"{sku_config.box_number['total_boxes']}")
+        top_pad_x = lbl_h * 0.12
+        top_pad_y = lbl_h * 0.06
+
+        top_text_row = engine.Row(
+            fixed_width=lbl_w,
             justify='space-between',
-            fixed_width=icon_side_label.width,
             align='bottom',
-            spacing=spacing_top_text_block,
-            padding_x = padding_x_top_text_block, # 距离左右边缘的安全距离
-            padding_y = padding_y_top_text_block, # 距离底部 50 像素的安全
+            spacing=lbl_w * 0.7,
+            padding_x=top_pad_x,
+            padding_y=top_pad_y,
             children=[
-                sku_name_block,
-                box_number_block
+                engine.Text(sku_config.sku_name, 'Arial', 'B', sku_name_pt,
+                            pil_font=pil_sku_name, ppi=ppi,
+                            color=sku_config.background_color),
+                engine.Text(box_number_text, 'Arial', '', box_num_pt,
+                            pil_font=pil_box_num, ppi=ppi,
+                            color=sku_config.background_color),
             ]
         )
-        
-        top_text_block.layout(x=0, y=0) # 先布局，获取整体宽高
-        top_text_block.render(draw) # 再渲染
-        
-        ############ 中间条码区 ############
-        barcode_image_left_text = sku_config.sku_name # 条码下方的文字和侧唛顶部SKU_name保持一致
-        barcodee_image_right_right = sku_config.side_text['sn_code'] # 条码下方右侧的文字来自side_text里的sn_code
-        
-        # 条码文字大小
-        font_barcode_size = int(icon_side_label.height * 0.05) # 条码文字大小占侧身高度的 5%
-        font_barcode = ImageFont.truetype(self.font_paths['Arial Regular'], font_barcode_size)
-        
-        # 条码高度
-        barcode_height = int(icon_side_label.height * 0.30) # 条码高度占侧身高度的 30%
-        
-        # 条码宽度
-        barcode_image_left_width = int(barcode_height * 2.9) # 条码宽度是高度的 2.7 倍
-        barcode_image_right_width = int(barcode_height * 2.0)
-        
-        # 生成条码图片
-        barcode_image_left = general_functions.generate_barcode_image(barcode_image_left_text, width=barcode_image_left_width, height=barcode_height)
-        barcode_image_right = general_functions.generate_barcode_image(barcodee_image_right_right, width=barcode_image_right_width, height=barcode_height)
-        
-        # 生成两个垂直容器分别放左侧和右侧的条码图片+文字
-        barcode_block_left = engine.Column(
-            align='center',
-            spacing=10,
-            children=[
-                engine.Image(barcode_image_left),
-                engine.Text(barcode_image_left_text, font=font_barcode)
-            ]
-        )
-        barcode_block_right = engine.Column(
-            align='center',
-            spacing=10,
-            children=[
-                engine.Image(barcode_image_right),
-                engine.Text(barcodee_image_right_right, font=font_barcode)
-            ]
-        )
-        
-        # 把条码区放在侧唛标签的底部中心位置
-        barcode_block = engine.Row(
+        top_text_row.layout(lbl_x, lbl_y)
+        top_text_row.render(pdf)
+
+        # ── 条形码区 ────────────────────────────────────────────────────────────
+        bc_font_px  = int(lbl_h * 0.05 * px_per_mm)
+        pil_bc_font = ImageFont.truetype(self.font_paths['Arial'], bc_font_px)
+        bc_font_pt  = bc_font_px * 72.0 / ppi
+
+        bc_h_mm        = lbl_h * 0.30
+        bc_w_left_mm   = bc_h_mm * 2.9
+        bc_w_right_mm  = bc_h_mm * 2.0
+
+        img_bc_left  = generate_barcode_image(sku_config.sku_name,
+                                              int(bc_w_left_mm  * px_per_mm),
+                                              int(bc_h_mm * px_per_mm))
+        img_bc_right = generate_barcode_image(sku_config.side_text['sn_code'],
+                                              int(bc_w_right_mm * px_per_mm),
+                                              int(bc_h_mm * px_per_mm))
+
+        bc_spacing = 40.0 / px_per_mm
+
+        bc_block = engine.Row(
             justify='center',
             align='bottom',
-            padding=50, # 距离底部 50 像素的安全
+            padding=50.0 / px_per_mm,
             children=[
-                barcode_block_left,
-                engine.Spacer(width=40, height=1), # 条码之间的水平间距
-                barcode_block_right
+                engine.Column(align='center', spacing=10.0 / px_per_mm, children=[
+                    engine.Image(self._barcode_on_white(img_bc_left)),
+                    engine.Text(sku_config.sku_name, 'Arial', '', bc_font_pt,
+                                pil_font=pil_bc_font, ppi=ppi),
+                ]),
+                engine.Spacer(width=bc_spacing, height=0.001),
+                engine.Column(align='center', spacing=10.0 / px_per_mm, children=[
+                    engine.Image(self._barcode_on_white(img_bc_right)),
+                    engine.Text(sku_config.side_text['sn_code'], 'Arial', '', bc_font_pt,
+                                pil_font=pil_bc_font, ppi=ppi),
+                ]),
             ]
         )
-        
-        
-        barcode_block.layout(x=560, y=195) # 先布局，获取整体宽高
-        barcode_block.render(draw) # 再渲染
-        
-        # icon_side_label.show()
-        
-        return icon_side_label
+        # 原代码：layout(x=560, y=195) px → mm
+        bc_block.layout(lbl_x + 560.0 / px_per_mm, lbl_y + 195.0 / px_per_mm)
+        bc_block.render(pdf)

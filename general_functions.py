@@ -1,9 +1,9 @@
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np  
-import pathlib as Path
+from pathlib import Path
 import barcode
 from barcode.writer import ImageWriter
-base_dir = Path.Path(__file__).parent
+base_dir = Path(__file__).parent
 from layout_engine import Element, Column, Row, Image as ImageElement
 import textwrap
 '''
@@ -261,11 +261,6 @@ def draw_dynamic_bottom_bg(canvas, sku_config, icon_company, icon_box_number, fo
     current_sku_size = int(max_sku_h * 1.2)  # 初始为最大高度的1.2倍
     min_sku_size = int(max_sku_h * 0.15)  # 最小字号为最大高度的15%
     
-    print(f"[正唛SKU调试] 画布宽度: {canvas_w}px ({canvas_w/sku_config.dpi:.1f}cm)")
-    print(f"[正唛SKU调试] 可用SKU宽度: {max_sku_w}px ({max_sku_w/sku_config.dpi:.1f}cm)")
-    print(f"[正唛SKU调试] 可用SKU高度: {max_sku_h}px ({max_sku_h/sku_config.dpi:.1f}cm)")
-    print(f"[正唛SKU调试] 初始字号: {current_sku_size}pt, 最小字号: {min_sku_size}pt")
-    
     # 自动减小字号直到宽度和高度都满足要求
     sku_font = None
     while current_sku_size > min_sku_size:
@@ -278,7 +273,6 @@ def draw_dynamic_bottom_bg(canvas, sku_config, icon_company, icon_box_number, fo
         if sw <= max_sku_w and sh <= max_sku_h:
             sku_font = test_font
             sku_w, sku_h = sw, sh
-            print(f"[正唛SKU调试] 最终字号: {current_sku_size}pt, 文字尺寸: {sw}x{sh}px ({sw/sku_config.dpi:.1f}x{sh/sku_config.dpi:.1f}cm)")
             break
         current_sku_size -= 5
     
@@ -350,10 +344,6 @@ def draw_dynamic_bottom_bg_move(canvas, sku_config, icon_company, icon_box_numbe
     # 判断是否冲突：公司区域右边界是否超过SKU黑框左边界
     space_is_enough = left_section_w <= sku_block_left
 
-    print(f"[正唛SKU调试] 画布宽度: {canvas_w}px ({canvas_w / sku_config.dpi:.1f}cm)")
-    print(f"[正唛SKU调试] 公司信息宽度: {left_section_w}px ({left_section_w / sku_config.dpi:.1f}cm)")
-    print(f"[正唛SKU调试] SKU区域左边界: {sku_block_left}px ({sku_block_left / sku_config.dpi:.1f}cm)")
-    print(f"[正唛SKU调试] 是否冲突: {not space_is_enough}, 公司右边界{'>' if not space_is_enough else '<='}SKU左边界")
     # --- 4. 根据空间是否足够，决定布局方式 ---
     if space_is_enough:
         # ===== 空间足够：使用原有逻辑 =====
@@ -375,7 +365,6 @@ def draw_dynamic_bottom_bg_move(canvas, sku_config, icon_company, icon_box_numbe
     else:
         # ===== 空间不足：错开布局 =====
         # ===== 空间不足：错开布局，SKU黑框向左扩展 =====
-        print(f"[正唛SKU调试] 使用错开布局，SKU黑框向左扩展")
 
         # 公司信息上移到底框上方
         icon_x = margin_1cm
@@ -444,7 +433,6 @@ def draw_dynamic_bottom_bg_move(canvas, sku_config, icon_company, icon_box_numbe
     # 使用 "mm" anchor 让文字的中心点对齐到区域中心
     draw.text((sku_center_x, sku_center_y), sku_config.sku_name, font=min_sku_font,
               fill=(161, 142, 102), anchor="mm")
-    print(f"[正唛SKU调试] 最终SKU字号: {min_sku_size_pt}pt, 区域: {sku_area_left}-{sku_area_right}px")
 
     
     
@@ -744,10 +732,6 @@ def draw_side_dynamic_bottom_bg_standard_move(canvas, sku_config, icon_company, 
         x3 = x4 - margin_10cm
         sku_block_width = x3
 
-    print(f"[侧唛SKU调试-普通] 画布宽度: {canvas_w}px ({canvas_w / sku_config.dpi:.1f}cm)")
-    print(f"[侧唛SKU调试-普通] SKU文字宽度: {sku_w / sku_config.dpi:.1f}cm, 字号: {min_sku_size_pt}pt")
-    print(f"[侧唛SKU调试-普通] 黑框宽度: {sku_block_width / sku_config.dpi:.1f}cm")
-
     # S弯的y坐标
     y3 = canvas_h - h_left
     y4 = canvas_h - h_right
@@ -779,7 +763,6 @@ def draw_side_dynamic_bottom_bg_standard_move(canvas, sku_config, icon_company, 
 
     draw.text((sku_center_x, sku_center_y), sku_config.sku_name, font=sku_font,
               fill=(161, 142, 102), anchor="mm")
-    print(f"[侧唛SKU调试-普通] 最终SKU字号: {min_sku_size_pt}pt, 区域: {sku_area_left}-{sku_area_right}px")
     return x4
 
 def draw_side_dynamic_bottom_bg_vertical(canvas, sku_config, icon_company, font_paths):
@@ -966,10 +949,6 @@ def draw_side_dynamic_bottom_bg_vertical_move(canvas, sku_config, icon_company, 
         x3 = x4 - margin_10cm
         sku_block_width = x3
 
-    print(f"[侧唛SKU调试-旋转] 画布宽度: {canvas_w}px ({canvas_w / sku_config.dpi:.1f}cm)")
-    print(f"[侧唛SKU调试-旋转] SKU文字宽度: {sku_w / sku_config.dpi:.1f}cm, 字号: {min_sku_size_pt}pt")
-    print(f"[侧唛SKU调试-旋转] 黑框宽度: {sku_block_width / sku_config.dpi:.1f}cm")
-
     # S弯的y坐标
     y3 = canvas_h - h_left
     y4 = canvas_h - h_right
@@ -1001,7 +980,6 @@ def draw_side_dynamic_bottom_bg_vertical_move(canvas, sku_config, icon_company, 
 
     draw.text((sku_center_x, sku_center_y), sku_config.sku_name, font=sku_font,
               fill=(161, 142, 102), anchor="mm")
-    print(f"[侧唛SKU调试-旋转] 最终SKU字号: {min_sku_size_pt}pt, 区域: {sku_area_left}-{sku_area_right}px")
     return x4
 
 def fill_sidepanel_text(icon_side_text_box_resized, sku_config, fonts_paths):
@@ -1050,10 +1028,6 @@ def fill_sidepanel_text(icon_side_text_box_resized, sku_config, fonts_paths):
     # 宽度大约占局部表格的 46%，高度 35%
     sku_barcode_img = generate_barcode_image(sku_config.sku_name, width=int(tw * 0.46), height=barcode_h_px)
 
-    print(f"[侧唛SKU调试-条码] 条码高度: {barcode_h_px}px ({barcode_h_px / sku_config.dpi:.1f}cm)")
-    barcode_w_px = scale_by_height(sku_barcode_img, barcode_h_px).width
-    print(f"[侧唛SKU调试-条码] 条码宽度: {barcode_w_px}px ({barcode_w_px / sku_config.dpi:.1f}cm)")
-    
     sku_x = int(left_zone_center - sku_barcode_img.width / 2)
     icon_side_text_box_resized.paste(sku_barcode_img, (sku_x, int(barcode_y)))
     
@@ -1439,15 +1413,20 @@ def draw_dynamic_company_brand(sku_config, company_name, contact_info, font_path
 
 
 # 自定义的文字处理组件
-class LegalTextGroup(Element):
+class LegalTextGroup:
+    """PIL-based text layout group (duck-typed for layout_engine Row/Column)."""
     def __init__(self, data_dict, reg_font, bold_font, width, height, dpi):
-        super().__init__(width=width, height=height)
         self.data_dict = data_dict
         self.reg_font = reg_font
         self.bold_font = bold_font
         self.padding_left = 30
         self.padding_top = 20
         self.dpi = dpi
+        # Duck-type interface expected by layout_engine Row / Column
+        self.width = float(width)
+        self.height = float(height)
+        self.x = 0.0
+        self.y = 0.0
 
     def layout(self, x, y, max_width=0):
         self.x = int(x)
@@ -1539,7 +1518,24 @@ def draw_legal_label_component(canvas, x, y, sku_config, resources, fonts, legal
 
     icon_gap_px = int(0.7 * dpi)  # 图标间距 1.3cm
 
-    # 辅助函数：计算缩放图片并返回 Element
+    # Lightweight PIL image element — pastes directly onto canvas
+    class _PILImg:
+        def __init__(self, img, width, height):
+            self.image = img
+            self.width = float(width)
+            self.height = float(height)
+            self.x = 0.0
+            self.y = 0.0
+
+        def layout(self, lx, ly, max_width=0):
+            self.x, self.y = float(lx), float(ly)
+            return self.width, self.height
+
+        def render(self, draw):
+            mask = self.image if self.image.mode == 'RGBA' else None
+            canvas.paste(self.image, (int(self.x), int(self.y)), mask)
+
+    # 辅助函数：计算缩放图片并返回 _PILImg
     def get_scaled_img_el(res_key, row_height_px, scale=0.85):
         img = resources[res_key].convert('RGBA')
         # 【核心逻辑】：如果是 GE 模式且使用的是单图 A
@@ -1551,7 +1547,8 @@ def draw_legal_label_component(canvas, x, y, sku_config, resources, fonts, legal
         target_h = int(row_height_px * current_scale)
         orig_w, orig_h = img.size
         target_w = int(orig_w * (target_h / orig_h))
-        return ImageElement(image=img, width=target_w, height=target_h), target_w
+        img_resized = img.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        return _PILImg(img_resized, target_w, target_h), target_w
 
     # --- 第一行逻辑 ---
 
@@ -1565,7 +1562,7 @@ def draw_legal_label_component(canvas, x, y, sku_config, resources, fonts, legal
     row1 = Row(
         children=[
             LegalTextGroup(legal_data, fonts['legal_reg'], fonts['legal_bold'], width=text_w, height=row1_h, dpi=dpi),
-            # 【修复点】不能直接用 Element()，改用传入空数据的 LegalTextGroup 占位
+            # 空白占位
             LegalTextGroup({}, fonts['legal_reg'], fonts['legal_bold'], width=box_w - text_w, height=row1_h, dpi=dpi)
         ],
         fixed_width=box_w, fixed_height=row1_h
@@ -1589,8 +1586,6 @@ def draw_legal_label_component(canvas, x, y, sku_config, resources, fonts, legal
 
     for is_on, res_key in check_list:
         if is_on == 1:
-            # 先加 1.3cm 间距，再加图标
-            # 【修复点】间距也改用空数据的 LegalTextGroup 占位
             active_row2_children.append(
                 LegalTextGroup({}, fonts['legal_reg'], fonts['legal_bold'], width=icon_gap_px, height=row2_h, dpi=dpi)
             )
@@ -1603,7 +1598,6 @@ def draw_legal_label_component(canvas, x, y, sku_config, resources, fonts, legal
 
     row2 = Row(
         children=[
-            # 左侧占位实现居中
             LegalTextGroup({}, fonts['legal_reg'], fonts['legal_bold'], width=row2_padding_val, height=row2_h, dpi=dpi),
             *active_row2_children
         ],
@@ -1636,10 +1630,86 @@ def draw_legal_label_component(canvas, x, y, sku_config, resources, fonts, legal
     final_v_line_x = x + v_line_relative_x
     draw.line([(final_v_line_x, y), (final_v_line_x, y + row1_h)], fill=0, width=3)
 
-    # 绘制第一行右侧图标 (使用 paste)
+    # 绘制第一行右侧图标 (直接粘贴)
     img1_x = x + box_w - margin_right - img1_w
     img1_y = y + (row1_h - img1_elem.height) // 2
     canvas.paste(img1_elem.image, (int(img1_x), int(img1_y)), img1_elem.image)
 
-    # 渲染所有子组件 (包括文字和居中的图标组)
+    # 渲染所有子组件 (LegalTextGroup → PIL text; _PILImg → canvas.paste)
     container.render(draw)
+
+
+def draw_company_brand_for_pdf(sku_config, company_name, contact_info, font_paths, resources):
+    """
+    生成公司品牌背景图（不含文字），供 fpdf2 矢量渲染使用。
+    返回 (bg_image, texts)：
+      bg_image — 仅含背景形状（黑色左半 + 白色右半）的 RGBA PIL 图，无文字
+      texts    — 列表，每项描述一条覆盖文字的位置和样式
+                 (相对于 bg_image 左上角, anchor='mm')
+    调用方可先用 pdf.image() 嵌入背景，再用 pdf.text() 叠加矢量文字。
+    """
+    dpi = sku_config.dpi
+    h_target_px = int(1.6 * dpi)
+
+    font_left_size = int(h_target_px * 0.65)
+    font_right_size = int(h_target_px * 0.75)
+    font_left = ImageFont.truetype(font_paths['calibri_bold'], size=font_left_size)
+    font_right = ImageFont.truetype(font_paths['calibri_bold'], size=font_right_size)
+
+    temp_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
+    left_text_w = temp_draw.textbbox((0, 0), company_name, font=font_left)[2]
+    right_text_w = temp_draw.textbbox((0, 0), contact_info, font=font_right)[2]
+
+    # --- 左侧黑色胶囊背景 ---
+    img_l = resources['icon_company_bg_left'].convert('RGBA')
+    img_l = scale_by_height(img_l, h_target_px)
+    w_l_orig, h_l = img_l.size
+    fixed_left_corner = h_l
+    target_l_w = left_text_w + int(0.7 * dpi)
+    left_final = Image.new('RGBA', (target_l_w, h_l), (0, 0, 0, 0))
+    part_l_corner = img_l.crop((0, 0, fixed_left_corner, h_l))
+    left_final.paste(part_l_corner, (0, 0), mask=part_l_corner)
+    part_l_mid = img_l.crop((fixed_left_corner + 5, 0, fixed_left_corner + 10, h_l)).resize(
+        (target_l_w - fixed_left_corner, h_l), Image.Resampling.NEAREST)
+    left_final.paste(part_l_mid, (fixed_left_corner, 0), mask=part_l_mid)
+
+    # --- 右侧白色尖头背景 ---
+    img_r = resources['icon_company_bg_right'].convert('RGBA')
+    img_r = scale_by_height(img_r, h_target_px)
+    w_r_orig, h_r = img_r.size
+    fixed_right_tip_w = int(w_r_orig * 0.27)
+    rect_part_w = right_text_w + int(0.7 * dpi)
+    target_r_w = rect_part_w + fixed_right_tip_w
+    right_final = Image.new('RGBA', (target_r_w, h_r), (0, 0, 0, 0))
+    part_r_tip = img_r.crop((w_r_orig - fixed_right_tip_w, 0, w_r_orig, h_r))
+    right_final.paste(part_r_tip, (target_r_w - fixed_right_tip_w, 0), mask=part_r_tip)
+    part_r_mid = img_r.crop((10, 0, 15, h_r)).resize(
+        (rect_part_w, h_r), Image.Resampling.NEAREST)
+    right_final.paste(part_r_mid, (0, 0), mask=part_r_mid)
+
+    # --- 合并背景（不写字）---
+    bg_w = target_l_w + target_r_w
+    combined_bg = Image.new('RGBA', (bg_w, h_l), (0, 0, 0, 0))
+    combined_bg.paste(left_final, (0, 0), mask=left_final)
+    combined_bg.paste(right_final, (target_l_w - 1, 0), mask=right_final)
+
+    # --- 文字覆盖信息（像素坐标，锚点 'mm'）---
+    texts = [
+        {
+            'text': company_name,
+            'font_path': font_paths['calibri_bold'],
+            'font_size_px': font_left_size,
+            'x_px': target_l_w // 2,
+            'y_px': h_l // 2 + 4,
+            'color': (161, 142, 102),
+        },
+        {
+            'text': contact_info,
+            'font_path': font_paths['calibri_bold'],
+            'font_size_px': font_right_size,
+            'x_px': target_l_w + rect_part_w // 2,
+            'y_px': h_r // 2,
+            'color': (0, 0, 0),
+        },
+    ]
+    return combined_bg, texts
