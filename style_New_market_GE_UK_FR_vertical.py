@@ -112,25 +112,41 @@ class MComboStandardStyle(BoxMarkStyle):
         }
 
     def register_fonts(self, pdf: FPDF):
-        pass  # hybrid PIL→PDF: panels rendered as raster images, no PDF fonts needed
+        pdf.add_font('Calibri',     '', self.font_paths['calibri'])
+        pdf.add_font('CalibriBold', '', self.font_paths['calibri_bold'])
+        pdf.add_font('ITCDemi',     '', self.font_paths['itc_demi'])
+        pdf.add_font('Courier',     '', self.font_paths['courier'])
 
     def draw_to_pdf(self, pdf: FPDF, sku_config):
-        """Render via PIL panels then embed as raster images in the PDF."""
-        layout_mm  = self.get_layout_config_mm(sku_config)
-        panels_map = self.get_panels_mapping(sku_config)
-        panels     = self.generate_all_panels(sku_config)
+        """Render panels: front as vector text + raster bottom bar, side as raster, flaps as images."""
+        layout = self.get_layout_config_mm(sku_config)
 
+        # Fill all panel backgrounds
         r, g, b = sku_config.background_color
         pdf.set_fill_color(r, g, b)
-        for _, (x, y, w, h) in layout_mm.items():
+        for _, (x, y, w, h) in layout.items():
             pdf.rect(x, y, w, h, style='F')
 
-        for region, (x, y, w, h) in layout_mm.items():
-            panel_key = panels_map.get(region)
-            if panel_key and panel_key in panels:
-                img = panels[panel_key]
-                if img is not None:
-                    pdf.image(img, x=x, y=y, w=w, h=h)
+        # Front panels (×2) — vector text + raster bottom bar
+        for key in ('panel_front1', 'panel_front2'):
+            x, y, w, h = layout[key]
+            self._draw_front_panel_v(pdf, sku_config, x, y, w, h)
+
+        # Side panels — keep as raster (complex general_functions deps + rotation)
+        side1 = self.generate_side_panel(sku_config, show_legal=True)
+        side2 = self.generate_side_panel(sku_config, show_legal=False)
+        x, y, w, h = layout['panel_side1']
+        pdf.image(side1, x=x, y=y, w=w, h=h)
+        x, y, w, h = layout['panel_side2']
+        pdf.image(side2, x=x, y=y, w=w, h=h)
+
+        # Left flaps (icon images)
+        self._draw_left_flaps_v(pdf, sku_config, layout)
+
+        # Right flaps
+        self._draw_right_flaps_v(pdf, sku_config, layout)
+
+        # Side up/down — blank (already filled with background)
 
     def generate_all_panels(self, sku_config):
         """生成 MCombo 标准样式需要的所有面板"""
@@ -556,3 +572,245 @@ class MComboStandardStyle(BoxMarkStyle):
         canvas_side_up = Image.new(sku_config.color_mode, (sku_config.w_px, sku_config.half_w_px), sku_config.background_color)
         canvas_side_down = Image.new(sku_config.color_mode, (sku_config.w_px, sku_config.half_w_px), sku_config.background_color)
         return canvas_side_up, canvas_side_down
+
+    # ── fpdf2 vector helper methods ─────────────────────────────────────────────
+
+    def _get_logo_file(self, sku_config):
+        """Return the front-panel logo path based on market flag (GE/FR/UK)."""
+        if getattr(sku_config, 'GE', 0) == 1:
+            return self.res_base / '正唛logo-ELEGUE.png'
+        elif getattr(sku_config, 'FR', 0) == 1 or getattr(sku_config, 'UK', 0) == 1:
+            return self.res_base / '正唛logo-MCombo.png'
+        return self.res_base / '正唛logo-MCombo.png'
+
+    def _generate_bottom_bar(self, sku_config):
+        """Generate the bottom bar section of the front panel as a PIL image."""
+        canvas = Image.new(sku_config.color_mode,
+                           (sku_config.l_px, sku_config.h_px),
+                           sku_config.background_color)
+        icon_company = general_functions.draw_dynamic_company_brand(
+            sku_config, sku_config.company_name, sku_config.contact_info,
+            self.font_paths, self.resources)
+        icon_box_number = self.resources[
+            f"icon_box_number_{sku_config.box_number['current_box']}"]
+        general_functions.draw_dynamic_bottom_bg_move(
+            canvas, sku_config, icon_company, icon_box_number, self.font_paths)
+        bottom_h_px = int(sku_config.bottom_gb_h * sku_config.dpi)
+        return canvas.crop((0, canvas.height - bottom_h_px,
+                            canvas.width, canvas.height))
+
+    @staticmethod
+    def _pil_bbox_mm(pil_font, text, ppi):
+        """Measure text bbox using anchor='ls' and convert to mm.
+        top is negative (above baseline), bottom is positive (below baseline)."""
+        left, top, right, bottom = pil_font.getbbox(text, anchor='ls')
+        px_per_mm = ppi / 25.4
+        return left / px_per_mm, top / px_per_mm, right / px_per_mm, bottom / px_per_mm
+
+    def _draw_text_top_left(self, pdf, x_mm, y_top_mm, text,
+                             font_family, font_style, font_size_pt, pil_font, ppi,
+                             color=(0, 0, 0)):
+        """Draw text anchored at visual top-left (like PIL anchor='la')."""
+        _, top_mm, _, _ = self._pil_bbox_mm(pil_font, text, ppi)
+        baseline_y = y_top_mm + (-top_mm)
+        r, g, b = color
+        pdf.set_text_color(r, g, b)
+        pdf.set_font(font_family, font_style, font_size_pt)
+        pdf.text(x_mm, baseline_y, text)
+
+    def _draw_text_top_center(self, pdf, x_center_mm, y_top_mm, text,
+                               font_family, font_style, font_size_pt, pil_font, ppi,
+                               color=(0, 0, 0)):
+        """Draw text anchored at visual top-center (horizontally centered)."""
+        left_mm, top_mm, right_mm, _ = self._pil_bbox_mm(pil_font, text, ppi)
+        text_w_mm = right_mm - left_mm
+        x_mm = x_center_mm - text_w_mm / 2.0
+        baseline_y = y_top_mm + (-top_mm)
+        r, g, b = color
+        pdf.set_text_color(r, g, b)
+        pdf.set_font(font_family, font_style, font_size_pt)
+        pdf.text(x_mm, baseline_y, text)
+
+    def _draw_text_mid_center(self, pdf, x_center_mm, y_center_mm, text,
+                               font_family, font_style, font_size_pt, pil_font, ppi,
+                               color=(0, 0, 0)):
+        """Draw text anchored at visual center (like PIL anchor='mm')."""
+        left_mm, top_mm, right_mm, bottom_mm = self._pil_bbox_mm(pil_font, text, ppi)
+        text_w_mm = right_mm - left_mm
+        text_h_mm = bottom_mm - top_mm
+        x_mm = x_center_mm - text_w_mm / 2.0
+        baseline_y = y_center_mm + (-top_mm) - text_h_mm / 2.0
+        r, g, b = color
+        pdf.set_text_color(r, g, b)
+        pdf.set_font(font_family, font_style, font_size_pt)
+        pdf.text(x_mm, baseline_y, text)
+
+    # ── vector panel drawing methods ────────────────────────────────────────────
+
+    def _draw_front_panel_v(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm):
+        """Draw the front panel with vector text and raster bottom bar."""
+        ppi = sku_config.ppi
+        px_per_mm = ppi / 25.4
+
+        # ── 1. Logo (centered top, h/3 height, max w/2 width) ──
+        logo_file = self._get_logo_file(sku_config)
+        icon_tm = general_functions.make_it_pure_black(
+            Image.open(logo_file).convert('RGBA'))
+        _tm_w, _tm_h = icon_tm.size
+
+        tm_h_mm = h_mm / 3.0
+        tm_w_mm = tm_h_mm * _tm_w / _tm_h
+        max_tm_w = w_mm / 2.0
+        if tm_w_mm > max_tm_w:
+            tm_w_mm = max_tm_w
+            tm_h_mm = tm_w_mm * _tm_h / _tm_w
+
+        tm_x = x_mm + (w_mm - tm_w_mm) / 2.0
+        tm_y = y_mm
+        pdf.image(icon_tm, x=tm_x, y=tm_y, w=tm_w_mm, h=tm_h_mm)
+
+        # ── 2. Bottom bar as raster ──
+        bottom_h_mm = sku_config.bottom_gb_h * 10.0
+        bottom_pil = self._generate_bottom_bar(sku_config)
+        pdf.image(bottom_pil,
+                  x=x_mm, y=y_mm + h_mm - bottom_h_mm,
+                  w=w_mm, h=bottom_h_mm)
+
+        # ── 3. Color text (right top, black rounded background) ──
+        color_text = str(sku_config.color)
+        color_size_px = int(h_mm * px_per_mm * self.font_ratios['color_font'])
+        color_size_pt = color_size_px * 72.0 / ppi
+        pil_color = ImageFont.truetype(self.font_paths['calibri_bold'],
+                                       color_size_px)
+
+        left_c, top_c, right_c, bottom_c = self._pil_bbox_mm(
+            pil_color, color_text, ppi)
+        text_w = right_c - left_c
+        text_h = bottom_c - top_c
+
+        color_x = x_mm + w_mm - text_w - 40.0   # 4cm from right
+        color_y = y_mm + 40.0                     # 4cm from top
+
+        pad_x_mm = 8.0             # 0.8cm
+        pad_y_top_mm = 4.0 * 0.7   # match mcombo pattern
+        pad_y_bot_mm = 4.0 * 1.4
+        radius_mm = 16 * 25.4 / ppi
+
+        rect_x = color_x - pad_x_mm
+        rect_y = color_y - pad_y_top_mm
+        rect_w = text_w + 2 * pad_x_mm
+        rect_h = text_h + pad_y_top_mm + pad_y_bot_mm
+
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(rect_x, rect_y, rect_w, rect_h,
+                 style='F', round_corners=True, corner_radius=radius_mm)
+
+        self._draw_text_top_left(pdf, color_x, color_y, color_text,
+                                  'CalibriBold', '', color_size_pt, pil_color, ppi,
+                                  color=(161, 142, 102))
+
+        # ── 4. Product text (centered, dynamic size) ──
+        product_text = sku_config.product
+        product_size_px = int(h_mm * px_per_mm * self.font_ratios['product_font'])
+        pil_product = ImageFont.truetype(self.font_paths['itc_demi'],
+                                         product_size_px)
+
+        p_left, p_top, p_right, p_bottom = pil_product.getbbox(product_text)
+        product_w_px = p_right - p_left
+        max_product_w_px = int(w_mm * px_per_mm * 0.85)
+        if product_w_px > max_product_w_px:
+            product_size_px = int(product_size_px * max_product_w_px / product_w_px)
+            pil_product = ImageFont.truetype(self.font_paths['itc_demi'],
+                                             product_size_px)
+            p_left, p_top, p_right, p_bottom = pil_product.getbbox(product_text)
+            product_w_px = p_right - p_left
+        product_size_pt = product_size_px * 72.0 / ppi
+        product_w_mm = product_w_px / px_per_mm
+
+        # ── 5. Size text ──
+        size_text = getattr(sku_config, 'size', None) or " "
+        size_size_px = int(h_mm * px_per_mm * self.font_ratios['size_font'])
+        size_size_pt = size_size_px * 72.0 / ppi
+        pil_size = ImageFont.truetype(self.font_paths['calibri_bold'],
+                                      size_size_px)
+
+        # ── 6. Group layout: product + decorative line + size ──
+        product_em_h_mm = product_size_px / px_per_mm   # em-square height
+        size_em_h_mm = size_size_px / px_per_mm
+        gap_mm = 10.0       # 1cm
+        line_h_mm = 3.0     # 0.3cm
+        line_w_mm = product_w_mm * 0.85
+        product_offset_mm = 5.0   # 0.5cm up
+
+        total_group_h = product_em_h_mm + line_h_mm + size_em_h_mm + gap_mm * 2
+        logo_bottom = y_mm + tm_h_mm
+        bottom_section_top = y_mm + h_mm - bottom_h_mm
+        available_h = bottom_section_top - logo_bottom
+        group_start_y = logo_bottom + (available_h - total_group_h) / 2.0
+
+        # Product text (shifted up ~0.5cm, matching original offset)
+        cx = x_mm + w_mm / 2.0
+        self._draw_text_top_center(pdf, cx,
+                                    group_start_y - product_offset_mm,
+                                    product_text,
+                                    'ITCDemi', '', product_size_pt,
+                                    pil_product, ppi)
+
+        # Decorative ellipse (black)
+        line_y = group_start_y + product_em_h_mm + gap_mm
+        line_x = cx - line_w_mm / 2.0
+        pdf.set_fill_color(0, 0, 0)
+        pdf.ellipse(line_x, line_y, line_w_mm, line_h_mm, style='F')
+
+        # Size text
+        size_y = line_y + line_h_mm + gap_mm
+        self._draw_text_top_center(pdf, cx, size_y, size_text,
+                                    'CalibriBold', '', size_size_pt,
+                                    pil_size, ppi)
+
+    def _draw_left_flaps_v(self, pdf, sku_config, layout):
+        """Draw left flap panels (vertical variant).
+        flap_top_front1 (full-width l×w): icon_top_box_number at 18cm.
+        flap_btm_front1 (half-width l×half_w): blank."""
+        total = sku_config.box_number['total_boxes']
+        current = sku_config.box_number['current_box']
+        icon = self.resources[f'icon_top_box_number_{total}_{current}']
+
+        x, y, w, h = layout['flap_top_front1']
+        target_h_mm = 180.0   # 18cm
+        max_w_mm = w * 0.8
+        icon_w = target_h_mm * icon.width / icon.height
+        if icon_w > max_w_mm:
+            icon_w = max_w_mm
+            icon_h = icon_w * icon.height / icon.width
+        else:
+            icon_h = target_h_mm
+
+        ix = x + (w - icon_w) / 2.0
+        iy = y + (h - icon_h) / 2.0
+        pdf.image(icon, x=ix, y=iy, w=icon_w, h=icon_h)
+        # flap_btm_front1 is blank (already background-filled)
+
+    def _draw_right_flaps_v(self, pdf, sku_config, layout):
+        """Draw right flap panels (vertical variant).
+        flap_top_front2 (half-width l×half_w): blank.
+        flap_btm_front2 (full-width l×w): 180° rotated icon at 17cm."""
+        total = sku_config.box_number['total_boxes']
+        current = sku_config.box_number['current_box']
+        icon = self.resources[f'icon_top_box_number_{total}_{current}']
+        icon_rotated = icon.rotate(180, expand=True)
+
+        # flap_top_front2 is blank (already background-filled)
+        x, y, w, h = layout['flap_btm_front2']
+        target_h_mm = 170.0   # 17cm
+        max_w_mm = w * 0.8
+        icon_w = target_h_mm * icon.width / icon.height
+        if icon_w > max_w_mm:
+            icon_w = max_w_mm
+            icon_h = icon_w * icon.height / icon.width
+        else:
+            icon_h = target_h_mm
+
+        ix = x + (w - icon_w) / 2.0
+        iy = y + (h - icon_h) / 2.0
+        pdf.image(icon_rotated, x=ix, y=iy, w=icon_w, h=icon_h)
