@@ -164,6 +164,63 @@ class BoxMarkGenerator:
               f"({max_x/10:.1f} cm x {max_y/10:.1f} cm)")
         print(f"   分辨率: {sku_config.ppi} PPI")
 
+    def generate_pdf_bytes(self, sku_config) -> bytes:
+        """
+        生成箱唛 PDF 并以字节流形式返回（不写入磁盘）。
+
+        Args:
+            sku_config: SKUConfig 实例
+        Returns:
+            PDF 文件的字节内容
+        """
+        layout = self.style.get_layout_config_mm(sku_config)
+        max_x = max(x + w for x, y, w, h in layout.values())
+        max_y = max(y + h for x, y, w, h in layout.values())
+
+        pdf = FPDF(unit='mm', format=(max_x, max_y))
+        pdf.set_auto_page_break(False)
+        pdf.add_page()
+
+        pdf.set_fill_color(255, 255, 255)
+        pdf.rect(0, 0, max_x, max_y, style='F')
+
+        self.style.register_fonts(pdf)
+        self.style.draw_to_pdf(pdf, sku_config)
+
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(0.5)
+        for _, (x, y, w, h) in layout.items():
+            pdf.rect(x, y, w, h)
+
+        return bytes(pdf.output())
+
+    def generate_complete_layout(self, sku_config):
+        """
+        生成箱唛并返回 PIL Image（供 Streamlit 预览使用）。
+        内部先生成 PDF 字节流，再用 PyMuPDF 光栅化为图像。
+
+        Args:
+            sku_config: SKUConfig 实例
+        Returns:
+            PIL.Image.Image 对象（RGBA 模式）
+        """
+        import fitz  # PyMuPDF
+        from PIL import Image
+        import io
+
+        pdf_bytes = self.generate_pdf_bytes(sku_config)
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+        page = doc[0]
+
+        # 使用 SKU 的 ppi 作为光栅化分辨率
+        zoom = sku_config.ppi / 72.0
+        mat = fitz.Matrix(zoom, zoom)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        doc.close()
+
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        return img
+
     @staticmethod
     def list_available_styles():
         """列出所有可用的样式"""

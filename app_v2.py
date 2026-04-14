@@ -285,7 +285,7 @@ if 'last_gen_info' not in st.session_state:
     st.session_state.last_gen_info = None
 
 # 页面标题
-st.title("📦 Mcombo·Barberpub·Exacme·新市场 箱唛生成器 V3")
+st.title("📦 Mcombo·Barberpub·Exacme·新市场 箱唛生成器 V4")
 st.caption("🎨 支持多样式切换 · 支持批量Excel生成")
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -517,20 +517,21 @@ with tab_single:
                 )
                 base_dir = Path(__file__).parent
                 generator = BoxMarkGenerator(base_dir=base_dir, style_name=selected_style, ppi=ppi)
-                canvas    = generator.generate_complete_layout(test_sku)
-                canvas_rgb = canvas.convert('RGB')
 
-                pdf_buffer = io.BytesIO()
-                canvas_rgb.save(pdf_buffer, "PDF", resolution=ppi, quality=100)
-                st.session_state.pdf_bytes = pdf_buffer.getvalue()
+                # 生成 PDF 字节（fpdf2 直接输出，矢量清晰）
+                pdf_bytes_data = generator.generate_pdf_bytes(test_sku)
+                st.session_state.pdf_bytes = pdf_bytes_data
+
+                # 用 PyMuPDF 将 PDF 光栅化为预览图
+                canvas = generator.generate_complete_layout(test_sku)
 
                 max_preview_width = 2000
-                if canvas_rgb.width > max_preview_width:
-                    preview_ratio = max_preview_width / canvas_rgb.width
-                    preview_size  = (max_preview_width, int(canvas_rgb.height * preview_ratio))
-                    preview_image = canvas_rgb.resize(preview_size, Image.Resampling.LANCZOS)
+                if canvas.width > max_preview_width:
+                    preview_ratio = max_preview_width / canvas.width
+                    preview_size  = (max_preview_width, int(canvas.height * preview_ratio))
+                    preview_image = canvas.resize(preview_size, Image.Resampling.LANCZOS)
                 else:
-                    preview_image = canvas_rgb
+                    preview_image = canvas
 
                 st.session_state.generated_image = preview_image
                 total_width, total_height = canvas.size
@@ -694,12 +695,7 @@ with tab_batch:
                                     style_name=sku_cfg.style_name,
                                     ppi=sku_cfg.ppi
                                 )
-                                canvas   = gen.generate_complete_layout(sku_cfg)
-                                canvas_rgb = canvas.convert('RGB')
-
-                                pdf_buf = io.BytesIO()
-                                canvas_rgb.save(pdf_buf, "PDF", resolution=sku_cfg.ppi, quality=100)
-                                pdf_bytes_item = pdf_buf.getvalue()
+                                pdf_bytes_item = gen.generate_pdf_bytes(sku_cfg)
 
                                 # 文件名去除非法字符
                                 safe_name = "".join(
@@ -707,7 +703,7 @@ with tab_batch:
                                     for c in sku_label
                                 ).strip()
                                 zf.writestr(f"{safe_name}.pdf", pdf_bytes_item)
-                                results.append((sku_label, True, f"✅ 成功 ({canvas.size[0]}×{canvas.size[1]}px)"))
+                                results.append((sku_label, True, "✅ 成功"))
 
                             except Exception as e:
                                 results.append((sku_label, False, f"❌ 失败：{str(e)}"))

@@ -7,6 +7,7 @@ from PIL import Image, ImageFont
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
 from general_functions import generate_barcode_image
+from layout_engine import Image as LEImage, Column
 
 
 @StyleRegistry.register
@@ -161,19 +162,24 @@ class MComboVerticalStyle(BoxMarkStyle):
         self._draw_front_panel(pdf, sku_config, x0, y1, l_mm, h_mm)
         self._draw_front_panel(pdf, sku_config, x2, y1, l_mm, h_mm)
 
-        # 两块侧面面板
-        self._draw_side_panel(pdf, sku_config, x1, y1, w_mm, h_mm)
-        self._draw_side_panel(pdf, sku_config, x3, y1, w_mm, h_mm)
+        # 两块侧面面板：
+        # 1. 先在以面板中心为原点、顺时针旋转90°的坐标系里，
+        #    用交换后的尺寸(h_mm 宽 × w_mm 高)绘制所有元素（位置/尺寸全按横向计算）
+        # 2. pdf.rotation(-90) 再逆时针旋转90°，把内容放回原来的竖向面板区域
+        cy_side = y1 + h_mm / 2
+        for sx in (x1, x3):
+            cx = sx + w_mm / 2
+            with pdf.rotation(90, cx, cy_side):
+                self._draw_side_panel(pdf, sku_config,
+                                      cx - h_mm / 2, cy_side - w_mm / 2,
+                                      h_mm, w_mm)
 
         # 翻盖面板
-        # flap_top_front1（大盖子，高 w_mm）：left_up，不旋转
-        self._draw_flap_left(pdf, sku_config, x0, 0.0, l_mm, w_mm, rotate_180=False)
-        # flap_btm_front1（小盖子，高 half_w_mm）：left_down，旋转 180°
-        self._draw_flap_left(pdf, sku_config, x0, y2, l_mm, half_w_mm, rotate_180=True)
-        # flap_top_front2（小盖子，高 half_w_mm）：right_up，旋转 180°
-        self._draw_flap_right(pdf, sku_config, x2, half_w_mm, l_mm, half_w_mm, rotate_180=True)
-        # flap_btm_front2（大盖子，高 w_mm）：right_down，不旋转
-        self._draw_flap_right(pdf, sku_config, x2, y2, l_mm, w_mm, rotate_180=False)
+        # flap_top_front1（左侧大盖子，高 w_mm）：不旋转
+        self._draw_flap_left(pdf, sku_config, x0, 0.0, l_mm, w_mm)
+
+        # flap_btm_front2（右侧大盖子，高 w_mm）：旋转 180°
+        self._draw_flap_right(pdf, sku_config, x2, y2, l_mm, w_mm)
 
     # ── 内部辅助方法（与 mcombo_standard 相同）──────────────────────────────────
 
@@ -264,47 +270,47 @@ class MComboVerticalStyle(BoxMarkStyle):
     # ── 面板绘制方法（与 mcombo_standard 相同）──────────────────────────────────
 
     def _draw_flap_left(self, pdf: FPDF, sku_config,
-                        x_mm, y_mm, w_mm, h_mm, rotate_180=False):
-        """绘制左侧翻盖面板（up 正常，down 旋转 180°）"""
-        total_boxes = sku_config.box_number['total_boxes']
-        icon = self.resources[f'icon_left_{total_boxes}_panel']
-
-        target_h_mm = 100.0
-        max_w_mm = w_mm * 0.8
-        icon_w_natural = target_h_mm * icon.width / icon.height
-        if icon_w_natural > max_w_mm:
-            icon_w_mm = max_w_mm
-            icon_h_mm = icon_w_mm * icon.height / icon.width
-        else:
-            icon_w_mm = icon_w_natural
-            icon_h_mm = target_h_mm
-
-        icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
-        img_x = x_mm + (w_mm - icon_w_mm) / 2.0
-        img_y = y_mm + (h_mm - icon_h_mm) / 2.0
-        pdf.image(icon_to_use, x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
-
-    def _draw_flap_right(self, pdf: FPDF, sku_config,
-                         x_mm, y_mm, w_mm, h_mm, rotate_180=False):
-        """绘制右侧翻盖面板（up 旋转 180°，down 正常）"""
+                        x_mm, y_mm, w_mm, h_mm):
+        """绘制左侧翻盖面板（不旋转）：icon_left 在上，icon_right 在下"""
         total_boxes = sku_config.box_number['total_boxes']
         current_box = sku_config.box_number['current_box']
-        icon = self.resources[f'icon_right_{total_boxes}-{current_box}_panel']
+        icon_left  = self.resources[f'icon_left_{total_boxes}_panel']
+        icon_right = self.resources[f'icon_right_{total_boxes}-{current_box}_panel']
 
-        target_h_mm = 100.0
-        max_w_mm = w_mm * 0.8
-        icon_w_natural = target_h_mm * icon.width / icon.height
-        if icon_w_natural > max_w_mm:
-            icon_w_mm = max_w_mm
-            icon_h_mm = icon_w_mm * icon.height / icon.width
-        else:
-            icon_w_mm = icon_w_natural
-            icon_h_mm = target_h_mm
+        target_width = w_mm * 0.67
+        
+        el = LEImage(icon_left, width=target_width)
+        er = LEImage(icon_right, width=target_width)
 
-        icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
-        img_x = x_mm + (w_mm - icon_w_mm) / 2.0
-        img_y = y_mm + (h_mm - icon_h_mm) / 2.0
-        pdf.image(icon_to_use, x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
+        col = Column([el, er], spacing=20.0, align='center')
+        col.layout(
+            x_mm + (w_mm - col.width)  / 2.0,
+            y_mm + (h_mm - col.height) / 2.0,
+        )
+        col.render(pdf)
+
+    def _draw_flap_right(self, pdf: FPDF, sku_config,
+                         x_mm, y_mm, w_mm, h_mm):
+        """绘制右侧翻盖面板（旋转 180°）：内容与左侧相同，整体旋转"""
+        total_boxes = sku_config.box_number['total_boxes']
+        current_box = sku_config.box_number['current_box']
+        icon_left  = self.resources[f'icon_left_{total_boxes}_panel']
+        icon_right = self.resources[f'icon_right_{total_boxes}-{current_box}_panel']
+
+        target_width = w_mm * 0.67
+
+        el = LEImage(icon_left, width=target_width)
+        er = LEImage(icon_right, width=target_width)
+
+        col = Column([el, er], spacing=20.0, align='center')
+        cx = x_mm + w_mm / 2.0
+        cy = y_mm + h_mm / 2.0
+        with pdf.rotation(180, cx, cy):
+            col.layout(
+                x_mm + (w_mm - col.width)  / 2.0,
+                y_mm + (h_mm - col.height) / 2.0,
+            )
+            col.render(pdf)
 
     def _draw_front_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
         """绘制正面（正唛）面板"""
@@ -475,6 +481,8 @@ class MComboVerticalStyle(BoxMarkStyle):
         ppi = sku_config.ppi
         px_per_mm = ppi / 25.4
         l_mm = sku_config.l_cm * 10
+        
+        bottom_gb_h = 8.0 # 侧唛底部边框的高度，设置为8厘米
 
         # ── 1. 底部黑色底框（S 形过渡）──────────────────────────────────────────
         icon_company = self.resources['icon_company']
@@ -483,7 +491,7 @@ class MComboVerticalStyle(BoxMarkStyle):
             _cw, _ch = _img.size
         icon_company_w_mm = icon_company_h_mm * _cw / _ch
 
-        h_left_mm  = sku_config.bottom_gb_h * 10.0
+        h_left_mm  = bottom_gb_h * 10.0
         h_right_mm = h_left_mm * 0.5
 
         left_section_w_mm = l_mm - (10.0 + icon_company_w_mm + 40.0)
@@ -529,7 +537,7 @@ class MComboVerticalStyle(BoxMarkStyle):
             _lw, _lh = _img.size
         label_w_mm = label_h_mm * _lw / _lh
         pdf.image(icon_label_box,
-                  x=x_mm + 30.0, y=y_mm + 30.0,
+                  x=x_mm + 30.0, y=y_mm + 25.0,
                   w=label_w_mm, h=label_h_mm)
 
         # ── 3. 侧唛 Logo（右上角，高 5cm，宽不超过 (w-8cm)/2）─────────────────
@@ -543,7 +551,7 @@ class MComboVerticalStyle(BoxMarkStyle):
             side_logo_w_mm = max_logo_w_mm
             side_logo_h_mm = side_logo_w_mm * _sh / _sw
         logo_x = x_mm + w_mm - side_logo_w_mm - 40.0
-        logo_y = y_mm + 40.0
+        logo_y = y_mm + 25.0
         pdf.image(icon_side_logo,
                   x=logo_x, y=logo_y,
                   w=side_logo_w_mm, h=side_logo_h_mm)
@@ -556,9 +564,9 @@ class MComboVerticalStyle(BoxMarkStyle):
         table_w_mm = table_h_mm * _tw / _th
 
         spacing_left_mm   = 28.1
-        spacing_bottom_mm = 30.0
+        spacing_bottom_mm = 15.0
         table_y = (y_mm + h_mm
-                   - sku_config.bottom_gb_h * 10.0
+                   - bottom_gb_h * 10.0
                    - spacing_bottom_mm
                    - table_h_mm)
 

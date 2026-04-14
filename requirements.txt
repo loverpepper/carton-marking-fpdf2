@@ -3,6 +3,7 @@ Pillow>=9.0.0
 
 # PDF生成和处理
 fpdf2>=2.8.4
+pymupdf>=1.24.0
 
 # 数值计算
 numpy>=1.21.0
