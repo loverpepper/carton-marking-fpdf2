@@ -217,11 +217,11 @@ class MComboStandardStyle(BoxMarkStyle):
         font_base = self.base_dir / 'assets' / 'Mcombo' / '样式一' / '箱唛字体'
         self.font_paths = {
             'calibri': str(font_base / 'calibri.ttf'),
-            'calibri_bold': str(font_base / 'calibri_blod.ttf'),
-            'itc_demi': str(font_base / 'ITC Avant Garde Gothic LT Demi.ttf'),
+            'calibri_bold': str(font_base / 'calibri-bold.ttf'),
+            'itc_demi': str(font_base / 'avantgardelt-demi.ttf'),
             'courier': str(font_base / 'cour.ttf'),
-            'side_font_label': str(font_base / 'ITC Avant Garde Gothic LT Demi.ttf'),
-            'side_font_bold': str(font_base / 'calibri_blod.ttf'),
+            'side_font_label': str(font_base / 'avantgardelt-demi.ttf'),
+            'side_font_bold': str(font_base / 'calibri-bold.ttf'),
             'side_font_barcode': str(font_base / 'calibri_blod.ttf')
         }
 

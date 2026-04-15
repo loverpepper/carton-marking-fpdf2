@@ -323,7 +323,7 @@ class MComboStandardStyle(BoxMarkStyle):
 
         # ── 1. 商标 Logo（居中顶部，高度 = 面板高度 / 3）──────────────────────
         icon_trademark = self.resources['icon_trademark']
-        tm_h_mm = h_mm / 3.0
+        tm_h_mm = h_mm / 3
         with Image.open(icon_trademark) as _img:
             _tm_w, _tm_h = _img.size
         tm_w_mm = tm_h_mm * _tm_w / _tm_h
@@ -641,9 +641,9 @@ class MComboStandardStyle(BoxMarkStyle):
         dim_text = (f'BOX SIZE: {sku_config.l_in:.1f}\'\' x '
                     f'{sku_config.w_in:.1f}\'\' x {sku_config.h_in:.1f}\'\'')
 
-        self._draw_text_top_left(pdf, text_x, y_mm + h_mm * 0.044,
+        self._draw_text_top_left(pdf, text_x, y_mm + h_mm * 0.052,
                                  weight_text, 'AvantGardeLT-Demi', '', label_pt, pil_label, ppi)
-        self._draw_text_top_left(pdf, text_x, y_mm + h_mm * 0.214,
+        self._draw_text_top_left(pdf, text_x, y_mm + h_mm * 0.225,
                                  dim_text, 'AvantGardeLT-Demi', '', label_pt, pil_label, ppi)
 
         # 条形码区域参数
