@@ -8,6 +8,8 @@ import pathlib as Path
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
 import layout_engine as engine
+from layout_engine import (Text as LEText, Row as LERow, Column as LEColumn,
+                            Image as LEImage, Spacer as LESpacer)
 import re
 
 
@@ -141,10 +143,9 @@ class ExacmeDoubleOpeningStyle(BoxMarkStyle):
         self._draw_front_panel(pdf, sku_config, x0, y1, l_mm, h_mm)
         self._draw_front_panel(pdf, sku_config, x2, y1, l_mm, h_mm)
 
-        # 两块侧面面板（保留为 PIL 光栅图，因模板背景复杂）
-        side_img = self._build_side_panel_image(sku_config)
-        pdf.image(side_img, x=x1, y=y1, w=w_mm, h=h_mm)
-        pdf.image(side_img, x=x3, y=y1, w=w_mm, h=h_mm)
+        # 两块侧面面板（layout_engine 直接渲染）
+        self._draw_side_panel(pdf, sku_config, x1, y1, w_mm, h_mm)
+        self._draw_side_panel(pdf, sku_config, x3, y1, w_mm, h_mm)
 
         # 翻盖面板
         # left_up（正常）
@@ -214,11 +215,102 @@ class ExacmeDoubleOpeningStyle(BoxMarkStyle):
         pdf.set_font(font_family, font_style, font_size_pt)
         pdf.text(x_mm, baseline_y, text)
 
-    # ── 侧面面板（PIL 光栅保留） ─────────────────────────────────────────────
+    # ── 侧面面板（fpdf2 + layout_engine） ─────────────────────────────────────
 
-    def _build_side_panel_image(self, sku_config):
-        """构建侧面面板 PIL 图像（保留光栅渲染，因模板背景复杂）"""
-        return self.generate_exacme_side_panel(sku_config)
+    def _draw_side_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
+        """绘制侧面面板：背景标签图 + layout_engine 文字/条码"""
+        meas_ppi = 300  # PIL 字体测量专用 ppi
+
+        # ── 1. 背景标签图 ──────────────────────────────────────────────────
+        icon_label = self.resources['icon_side_label']
+        rot_img = icon_label.rotate(-90, expand=True)   # 竖标签 → 横向
+        rot_w_px, rot_h_px = rot_img.size
+
+        target_w_mm = w_mm * 0.78
+        scale = target_w_mm / rot_w_px               # mm / pixel
+        target_h_mm = rot_h_px * scale
+        img_x = x_mm + (w_mm - target_w_mm) / 2.0
+        img_y = y_mm + (h_mm - target_h_mm) / 2.0
+        pdf.image(rot_img, x=img_x, y=img_y, w=target_w_mm, h=target_h_mm)
+
+        # ── 1b. 顶部 SKU 名称（居中，字号自适应标签宽度的 73%）────────────────
+        sku_target_w_mm = target_w_mm * 0.730
+        sku_name_pt, pil_sku_name = self._get_font_size(
+            sku_config.sku_name, 'Arial Bold', sku_target_w_mm, meas_ppi)
+        sku_top_y = img_y + 20 * scale
+        self._draw_text_top_center(pdf, img_x + target_w_mm / 2.0, sku_top_y,
+                                   sku_config.sku_name,
+                                   'Arial', 'B', sku_name_pt, pil_sku_name, meas_ppi,
+                                   color=sku_config.background_color)
+
+        # ── 2. 字体 ────────────────────────────────────────────────────────
+        sz_bold_pt   = target_h_mm * 0.052 * 72 / 25.4
+        sz_normal_pt = target_h_mm * 0.043 * 72 / 25.4
+        sz_bold_px   = int(sz_bold_pt   * meas_ppi / 72)
+        sz_normal_px = int(sz_normal_pt * meas_ppi / 72)
+
+        pil_bold   = ImageFont.truetype(self.font_paths['Arial Bold'],    sz_bold_px)
+        pil_normal = ImageFont.truetype(self.font_paths['Arial Regular'], sz_normal_px)
+
+        def B(t):
+            return LEText(t, 'Arial', 'B', sz_bold_pt, pil_bold, meas_ppi)
+
+        def N(t):
+            return LEText(t, 'Arial', '', sz_normal_pt, pil_normal, meas_ppi)
+
+        def H_ROW(*elems):
+            return LERow(list(elems), spacing=10 * scale, align='center')
+
+        gw = sku_config.side_text['gw_value']
+        nw = sku_config.side_text['nw_value']
+        gw_label = "G.W./N.W. :"
+        gw_l, gw_t, gw_r, gw_b = pil_bold.getbbox(gw_label)
+        indent_w = (gw_r - gw_l) / (meas_ppi / 25.4)
+        indent_h = (gw_b - gw_t) / (meas_ppi / 25.4)
+
+        left_text_block = LEColumn([
+            H_ROW(B("COLOUR  :"),  N(str(sku_config.color))),
+            H_ROW(B(gw_label),     N(f"{gw} / {nw} LBS")),
+            H_ROW(LESpacer(width=indent_w, height=indent_h),
+                  N(f"{gw / 2.20462:.1f} / {nw / 2.20462:.1f} KG")),
+            H_ROW(B("BOX SIZE :"),
+                  N(f'{sku_config.l_cm/2.54:.1f}" x {sku_config.w_cm/2.54:.1f}" x {sku_config.h_cm/2.54:.1f}"')),
+            H_ROW(LESpacer(width=indent_w, height=indent_h),
+                  N(f"{sku_config.l_cm:.1f}cm x {sku_config.w_cm:.1f}cm x {sku_config.h_cm:.1f}cm")),
+        ], spacing=25 * scale, align='left')
+
+        left_text_block.layout(img_x + 26 * scale, img_y + 250 * scale)
+        left_text_block.render(pdf)
+
+        # ── 3. 条码 ────────────────────────────────────────────────────────
+        bc_h_px       = int(rot_h_px * 0.30)
+        bc_h_mm       = bc_h_px * scale
+        bc_left_w_px  = int(bc_h_px * 2.9)
+        bc_right_w_px = int(bc_h_px * 2.0)
+        bc_left_w_mm  = bc_left_w_px  * scale
+        bc_right_w_mm = bc_right_w_px * scale
+
+        bc_left_img  = general_functions.generate_barcode_image(
+            sku_config.sku_name, width=bc_left_w_px, height=bc_h_px)
+        bc_right_img = general_functions.generate_barcode_image(
+            sku_config.side_text['sn_code'], width=bc_right_w_px, height=bc_h_px)
+
+        sz_bc_pt = target_h_mm * 0.05 * 72 / 25.4
+        sz_bc_px = int(sz_bc_pt * meas_ppi / 72)
+        pil_bc   = ImageFont.truetype(self.font_paths['Arial Regular'], sz_bc_px)
+
+        bc_left_col  = LEColumn([
+            LEImage(bc_left_img,  width=bc_left_w_mm),
+            LEText(sku_config.sku_name, 'Arial', '', sz_bc_pt, pil_bc, meas_ppi),
+        ], spacing=10 * scale, align='center')
+        bc_right_col = LEColumn([
+            LEImage(bc_right_img, width=bc_right_w_mm),
+            LEText(sku_config.side_text['sn_code'], 'Arial', '', sz_bc_pt, pil_bc, meas_ppi),
+        ], spacing=10 * scale, align='center')
+
+        bc_row = LERow([bc_left_col, bc_right_col], spacing=40 * scale, align='bottom')
+        bc_row.layout(img_x + 609 * scale, img_y + 235 * scale)
+        bc_row.render(pdf)
 
     # ── 正面面板 ─────────────────────────────────────────────────────────────
 
@@ -473,6 +565,11 @@ class ExacmeDoubleOpeningStyle(BoxMarkStyle):
             self._draw_text_top_center(pdf, cx, line2_y, line2,
                                         'Arial', 'B', mid_size_pt, pil_mid, ppi)
 
+    
+    
+    
+    ### 历史遗留的 PIL 面板生成方法，已被上面直接绘制到 PDF 的方法替代，但暂时保留以备不时之需
+    
     def generate_all_panels(self, sku_config):
         """生成 Exacme 对开盖样式需要的所有面板"""
         
@@ -513,9 +610,9 @@ class ExacmeDoubleOpeningStyle(BoxMarkStyle):
         """加载字体路径"""
         font_base = self.base_dir / 'assets' / 'Exacme' / '对开盖' / '箱唛字体'
         self.font_paths = {
-            'Arial Regular': str(font_base / 'arial.ttf'),
-            'Arial Bold': str(font_base / 'arialbd.ttf'),
-            'Arial Black': str(font_base / 'ariblk.ttf'),
+            'Arial Regular': str(font_base / 'arialmt.ttf'),
+            'Arial Bold':    str(font_base / 'arial-boldmt.ttf'),
+            'Arial Black':   str(font_base / 'ariblk.ttf'),
         }
         
     def generate_exacme_front_panel(self, sku_config):

@@ -693,6 +693,11 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
                 origin_text, 'CentSchbook', '', font_pt, pil_orig, ppi,
                 color=(bg_r, bg_g, bg_b))
 
+
+
+
+
+### 历史代码文件，仅供参考原始的样式是什么
     def generate_all_panels(self, sku_config):
         """生成 Barberpub 全搭盖样式需要的所有面板"""
         
