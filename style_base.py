@@ -23,7 +23,7 @@ class BoxMarkStyle(ABC):
 
     @abstractmethod
     def _load_resources(self):
-        """加载样式所需的 PIL 图片资源到 self.resources"""
+        """加载样式所需的资源路径（pathlib.Path）到 self.resources"""
         pass
 
     @abstractmethod
@@ -51,14 +51,6 @@ class BoxMarkStyle(ABC):
         """
         返回布局配置（单位：mm）
         格式: {"区域名": (x, y, w, h), ...}
-        """
-        pass
-
-    @abstractmethod
-    def get_panels_mapping(self, sku_config) -> dict:
-        """
-        返回布局区域 → 面板类型的映射关系（供调试/可视化用）
-        格式: {"区域名": "面板键名", ...}
         """
         pass
 

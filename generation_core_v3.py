@@ -8,6 +8,7 @@ from style_base import StyleRegistry
 
 # 只导入已完成 fpdf2 重构的样式模块（自动触发 @StyleRegistry.register 注册）
 import style_mcombo_standard
+import style_mcombo_vertical
 import style_barberpub_topandbottom
 import style_barberpub_doubleopening
 import style_barberpub_fulloverlap
@@ -15,10 +16,9 @@ import style_exacme_fulloverlap
 import style_exacme_doubleopening
 import style_exacme_topandbottom_squaretrampoline
 import style_exacme_topandbottom_doubleringandburiedtrampoline
-import style_mcombo_vertical
 import style_New_market_GE_UK_FR_vertical
 import style_New_market_GE_UK_FR_standard
-import style_macrout_topandbottom   # fpdf2 版，已完成重构
+import style_macrout_topandbottom   
 import style_lovupet_doubleopening
 # 未来在这里导入更完成 fpdf2 重构的更多样式：
 # import style_simple
