@@ -204,23 +204,24 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
         return width_mm, width_mm * orig_h / orig_w
 
     def _draw_diagonal_stripes_pdf(
-        self, pdf, x_mm, y_mm, w_mm, h_mm, stripe_w_mm=4.0, bg_color=(200, 180, 140)
+        self, pdf, x_mm, y_mm, w_mm, stripe_h_mm, stripe_w_mm=4.0, bg_color=(200, 180, 140)
     ):
         """Draw alternating diagonal warning stripes in a rectangle using PDF polygons."""
-        with pdf.rect_clip(x_mm, y_mm, w_mm, h_mm):
+        """ w_mm 参数是底边宽度，stripe_h_mm 是条纹高度（垂直方向），stripe_w_mm 是条纹宽度（沿斜线方向）。"""
+        with pdf.rect_clip(x_mm, y_mm, w_mm, stripe_h_mm):
             r, g, b = bg_color
             pdf.set_fill_color(r, g, b)
-            pdf.rect(x_mm, y_mm, w_mm, h_mm, style="F")
+            pdf.rect(x_mm, y_mm, w_mm, stripe_h_mm, style="F")
             pdf.set_fill_color(0, 0, 0)
             stripe_offset = stripe_w_mm * 1.75  # 条纹间距，stripe_offset 是从一个条纹开始到下一个条纹开始的距离
-            num = int((w_mm + h_mm) / stripe_offset) + 2
+            num = int((w_mm + stripe_h_mm) / stripe_offset) + 2
             for i in range(num):
-                sx = x_mm + i * stripe_offset - h_mm
+                sx = x_mm + i * stripe_offset - stripe_h_mm
                 pts = [
-                    (sx, y_mm + h_mm),
-                    (sx + stripe_w_mm, y_mm + h_mm),
-                    (sx + stripe_w_mm + h_mm, y_mm),
-                    (sx + h_mm, y_mm),
+                    (sx, y_mm + stripe_h_mm),
+                    (sx + stripe_w_mm, y_mm + stripe_h_mm),
+                    (sx + stripe_w_mm + stripe_h_mm, y_mm),
+                    (sx + stripe_h_mm, y_mm),
                 ]
                 pdf.polygon(pts, style="F")
         # ── 关键修复 ──────────────────────────────────────────────────────────

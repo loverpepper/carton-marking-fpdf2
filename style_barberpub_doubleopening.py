@@ -5,6 +5,7 @@ Barberpub 对开盖样式 - fpdf2 版
 from fpdf import FPDF
 from PIL import Image, ImageFont
 import pathlib
+import fitz  # PyMuPDF
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
 from general_functions import generate_barcode_image
@@ -163,6 +164,36 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         return size_pt, pil_font
 
     @staticmethod
+    def _get_image_size(path) -> tuple:
+        """获取图片尺寸 (width, height)，兼容 PDF 和光栅图片。"""
+        path = pathlib.Path(path)
+        if path.suffix.lower() == '.pdf':
+            doc = fitz.open(str(path))
+            rect = doc[0].rect
+            doc.close()
+            return rect.width, rect.height
+        with Image.open(path) as img:
+            return img.size
+
+    @staticmethod
+    def _prepare_image_for_fpdf(path):
+        """返回可直接传给 fpdf2 pdf.image() 的对象。
+        PDF 文件用 fitz 转换为 SVG（保持矢量），写入临时文件后返回路径；其他格式原样返回路径。
+        """
+        import tempfile, os
+        path = pathlib.Path(path)
+        if path.suffix.lower() == '.pdf':
+            doc = fitz.open(str(path))
+            page = doc[0]
+            svg_str = page.get_svg_image()
+            doc.close()
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix='.svg')
+            os.write(tmp_fd, svg_str.encode('utf-8'))
+            os.close(tmp_fd)
+            return pathlib.Path(tmp_path)
+        return path
+
+    @staticmethod
     def _pil_bbox_mm(pil_font, text, ppi):
         left, top, right, bottom = pil_font.getbbox(text, anchor='ls')
         px_per_mm = ppi / 25.4
@@ -189,6 +220,37 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         pdf.set_text_color(r, g, b)
         pdf.set_font(font_family, font_style, font_size_pt)
         pdf.text(x_mm, baseline_y, text)
+
+    def _draw_diagonal_stripes_pdf(
+            self, pdf, x_mm, y_mm, w_mm, stripe_h_mm, stripe_w_mm=4.0, bg_color=(161, 142, 102)
+        ):
+        """Draw alternating diagonal warning stripes in a rectangle using PDF polygons."""
+        """ w_mm 参数是底边宽度，stripe_h_mm 是条纹高度（垂直方向），stripe_w_mm 是条纹宽度（沿斜线方向）。"""
+        with pdf.rect_clip(x_mm, y_mm, w_mm, stripe_h_mm):
+            r, g, b = bg_color
+            pdf.set_fill_color(r, g, b)
+            pdf.rect(x_mm, y_mm, w_mm, stripe_h_mm, style="F")
+            pdf.set_fill_color(0, 0, 0)
+            stripe_offset = stripe_w_mm * 1.75  # 条纹间距，stripe_offset 是从一个条纹开始到下一个条纹开始的距离
+            num = int((w_mm + stripe_h_mm) / stripe_offset) + 2
+            for i in range(num):
+                sx = x_mm + i * stripe_offset - stripe_h_mm
+                pts = [
+                    (sx, y_mm + stripe_h_mm),
+                    (sx + stripe_w_mm, y_mm + stripe_h_mm),
+                    (sx + stripe_w_mm + stripe_h_mm, y_mm),
+                    (sx + stripe_h_mm, y_mm),
+                ]
+                pdf.polygon(pts, style="F")
+        # ── 关键修复 ──────────────────────────────────────────────────────────
+        # rect_clip 使用 q/Q 保存/恢复 PDF 流的图形状态（颜色被还原为背景色），
+        # 但 fpdf2 的 Python 对象 fill_color 仍停留在 clip 内最后一次 set_fill_color(0,0,0)
+        # 的值（DeviceGray(0)）。若不重置，后续调用 set_text_color(0,0,0) 时 fpdf2 会
+        # 认为 text_color == fill_color（都是黑色），从而跳过颜色运算符的输出，
+        # 导致文字以 Q 还原后的背景色渲染（不可见）。
+        # 重新设置 fill_color 使 Python 状态与 PDF 流实际颜色重新同步。
+        r, g, b = bg_color
+        pdf.set_fill_color(r, g, b)
 
     # ── 翻盖面板 ─────────────────────────────────────────────────────────────
 
@@ -247,7 +309,7 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         # 3. 产品名称（DroidSans，48% 高度居中）
         product_text = sku_config.product
         prod_pt, pil_prod = self._get_font_size_constrained(
-            product_text, 'DroidSans', w_mm * 0.63, h_mm * 0.28, ppi)
+            product_text, 'DroidSans', w_mm * 0.70, h_mm * 0.28, ppi)
         left_mm, top_mm, right_mm, bottom_mm = self._pil_bbox_mm(pil_prod, product_text, ppi)
         text_w_mm = right_mm - left_mm
         prod_h_mm = bottom_mm - top_mm
@@ -255,14 +317,16 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
 
         # 4. 标语图片（产品名称下方，居中）
         icon_slogan = self.resources['icon_slogan']
-        slogan_h_mm = h_mm * 0.05
+        slogan_w_mm = text_w_mm * 0.70
         with Image.open(icon_slogan) as img:
             s_orig_w, s_orig_h = img.size
-        slogan_w_mm = slogan_h_mm * s_orig_w / s_orig_h
+        slogan_h_mm = slogan_w_mm * s_orig_h / s_orig_w
         vertical_gap = 13.0  # 1.3cm
 
         total_center_h = prod_h_mm + vertical_gap + slogan_h_mm
-        center_y_start = y_mm + h_mm * 0.48 - total_center_h / 2
+        
+        # 中间SKU文字和标语的起始位置，使它们的整体垂直中心位于面板高度的 49% 位置 
+        center_y_start = y_mm + h_mm * 0.49 - total_center_h / 2
 
         # 绘制产品名称
         self._draw_text_top_left(pdf, text_x, center_y_start,
@@ -274,19 +338,19 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         slogan_y = product_y_top + prod_h_mm + vertical_gap
         pdf.image(icon_slogan, x=slogan_x, y=slogan_y, w=slogan_w_mm, h=slogan_h_mm)
 
-        # 5. 底部黑色条纹
-        stripe_height_mm = 12.0
+        # 5. 底部斜纹条纹
+        stripe_height_mm = 15.0
         bottom_margin_mm = 6.0
         stripe_y = y_mm + h_mm - stripe_height_mm - bottom_margin_mm
-        pdf.set_fill_color(0, 0, 0)
-        pdf.rect(x_mm, stripe_y, w_mm, stripe_height_mm, style='F')
+        stripe_width_mm = 30.0  # 条纹宽度
+        self._draw_diagonal_stripes_pdf(pdf, x_mm, stripe_y, w_mm, stripe_height_mm, stripe_width_mm)
 
         margin_bottom = 32.0
 
         # 6. SKU 代码（左下角，CentSchbook）
         sku_text = sku_config.sku_name
         sku_pt, pil_sku = self._get_font_size_constrained(
-            sku_text, 'CentSchbook', w_mm * 0.715, h_mm * 0.14, ppi)
+            sku_text, 'CentSchbook', w_mm * 0.715, h_mm * 0.16, ppi)
         _, sku_top_mm, _, sku_bot_mm = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_h_mm = sku_bot_mm - sku_top_mm
         sku_y_top = y_mm + h_mm - margin_bottom - sku_h_mm - 5.0
@@ -301,7 +365,7 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         pil_color = ImageFont.truetype(self.font_paths['CentSchbook'], color_px)
         _, c_top_mm, _, c_bot_mm = self._pil_bbox_mm(pil_color, color_text, ppi)
         color_h_mm = c_bot_mm - c_top_mm
-        color_y_top = sku_y_top - color_h_mm - 3.0
+        color_y_top = sku_y_top - color_h_mm - 10.0 # 颜色文字与 SKU 文字之间间距 10mm
         color_x = x_mm + margin_left
         self._draw_text_top_left(pdf, color_x, color_y_top,
                                   color_text, 'CentSchbook', '', color_pt, pil_color, ppi)
@@ -314,14 +378,14 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         left_b, top_b, right_b, bot_b = self._pil_bbox_mm(pil_box, box_text, ppi)
         box_w_mm = right_b - left_b
         box_h_mm = bot_b - top_b
-        box_y_top = y_mm + h_mm - margin_bottom - box_h_mm - 5.0
+        box_y_top = y_mm + h_mm - margin_bottom - box_h_mm - (5 + 0.7 * 1.2 * 10) # 0.7 * 1.2 * 10 是下面文字外框的高度
         box_x = x_mm + w_mm - margin_right - box_w_mm
 
         # 黑色圆角背景
         pad_x = 5.0
-        pad_y_top = 0.7 * 0.7 * 10  # 0.7cm * 0.7 → mm  = 4.9
-        pad_y_bot = 0.7 * 1.4 * 10  # 0.7cm * 1.4 → mm  = 9.8
-        radius_mm = 12 * 25.4 / ppi
+        pad_y_top = 0.7 * 1.2 * 10  # 0.7cm * 1.2 → mm  = 8.4
+        pad_y_bot = 0.7 * 1.2 * 10  # 0.7cm * 1.2 → mm  = 8.4
+        radius_mm = 20 * 25.4 / ppi
         pdf.set_fill_color(0, 0, 0)
         pdf.rect(box_x - pad_x, box_y_top - pad_y_top,
                  box_w_mm + 2 * pad_x, box_h_mm + pad_y_top + pad_y_bot,
@@ -339,6 +403,22 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         ppi = sku_config.ppi
         px_per_mm = ppi / 25.4
 
+        if sku_config.w_cm > sku_config.h_cm and abs(sku_config.w_cm - sku_config.h_cm) > 10 and sku_config.h_cm > 30:
+            # 宽大约等于高，使用宽侧唛布局
+            self._draw_side_wide(pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
+                                 ppi, px_per_mm)
+        elif sku_config.h_cm <= 30:
+            # 高小于等于30cm，使用宽侧唛布局
+            self._draw_side_low(pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
+                                 ppi, px_per_mm)
+        else:
+            # 使用窄侧唛布局
+            self._draw_side_narrow(pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
+                                   ppi, px_per_mm)
+
+    def _draw_side_wide(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm, ppi, px_per_mm):
+        """宽侧唛布局（w_cm > h_cm）"""
+        
         # 网址图标（两种布局共用，顶部居中）
         webside_path = self.resources['icon_webside']
         webside_w_mm = w_mm * 0.5
@@ -346,56 +426,53 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
             ws_orig_w, ws_orig_h = img.size
         webside_h_mm = webside_w_mm * ws_orig_h / ws_orig_w
         webside_x = x_mm + (w_mm - webside_w_mm) / 2
-        webside_y = y_mm + 30.0
+        # 网址图标的顶部位置在侧唛顶部下方的 18% 处
+        webside_y = y_mm + h_mm * 0.14
         pdf.image(webside_path, x=webside_x, y=webside_y,
                   w=webside_w_mm, h=webside_h_mm)
 
-        if sku_config.w_cm > sku_config.h_cm:
-            self._draw_side_wide(pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
-                                 ppi, px_per_mm)
-        else:
-            self._draw_side_narrow(pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
-                                   ppi, px_per_mm,
-                                   webside_y=webside_y, webside_h_mm=webside_h_mm)
-
-    def _draw_side_wide(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm, ppi, px_per_mm):
-        """宽侧唛布局（w_cm > h_cm）"""
-
-        # 底部黑色条纹
-        stripe_height_mm = 12.0
+        # 底部斜纹条纹
+        stripe_height_mm = 15.0
+        stripe_width_mm = 30.0
         bottom_margin_mm = 6.0
         stripe_y = y_mm + h_mm - stripe_height_mm - bottom_margin_mm
-        pdf.set_fill_color(0, 0, 0)
-        pdf.rect(x_mm, stripe_y, w_mm, stripe_height_mm, style='F')
+        self._draw_diagonal_stripes_pdf(pdf, x_mm, stripe_y, w_mm, stripe_height_mm, stripe_width_mm)
 
         # 线描图（左侧）
         if hasattr(sku_config, 'img_line_drawing') and sku_config.img_line_drawing is not None:
             line_path = sku_config.img_line_drawing
         else:
             line_path = self.resources['line_drawing']
-        line_h_mm = h_mm * 0.66
-        with Image.open(line_path) as img:
-            l_orig_w, l_orig_h = img.size
-        line_w_mm = line_h_mm * l_orig_w / l_orig_h
-        line_x = x_mm + 50.0
+        
+        # 线描图高度占侧面高度的 58%，保持宽高比不变
+        line_w_mm = w_mm * 0.35
+        l_orig_w, l_orig_h = self._get_image_size(line_path)
+        line_h_mm = line_w_mm * l_orig_h / l_orig_w
+        
+        #线描图起始位置：左侧边距 50mm，垂直居中，向下偏移 h_mm * 0.05
+        line_x = x_mm + 26.0
         line_y = y_mm + (h_mm - line_h_mm) / 2 + h_mm * 0.05
-        pdf.image(line_path, x=line_x, y=line_y, w=line_w_mm, h=line_h_mm)
+        pdf.image(self._prepare_image_for_fpdf(line_path), x=line_x, y=line_y, w=line_w_mm, h=line_h_mm)
 
         # SKU 文字（右区，CentSchbook）
         sku_text = sku_config.sku_name
+        # SKU 文字大小受限于侧唛宽度的 55.1% 和侧唛高度的 11% 的双重约束
         sku_pt, pil_sku = self._get_font_size_constrained(
-            sku_text, 'CentSchbook', w_mm * 0.571, h_mm * 0.11, ppi)
+            sku_text, 'CentSchbook', w_mm * 0.551, h_mm * 0.11, ppi)
         _, sku_top_mm, sku_right_mm, sku_bot_mm = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_left_mm, _, _, _ = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_w_mm = sku_right_mm - sku_left_mm
         sku_h_mm = sku_bot_mm - sku_top_mm
-        sku_x = x_mm + w_mm * 0.38
+        
+        # SKU 文字的右侧位置在侧唛右边距 26mm 处，顶部位置在侧唛顶部下方的 38% 处
+        sku_x = x_mm + w_mm - sku_w_mm - 23 
         sku_y_top = y_mm + h_mm * 0.38
         self._draw_text_top_left(pdf, sku_x, sku_y_top,
                                   sku_text, 'CentSchbook', '', sku_pt, pil_sku, ppi)
 
         # 颜色文字（SKU 下方右区）
         color_text = sku_config.color.upper()
+        #颜色文字大小是侧唛高度的 4.1%
         color_px = int(h_mm * px_per_mm * 0.041)
         color_pt = color_px * 72.0 / ppi
         pil_color = ImageFont.truetype(self.font_paths['CentSchbook'], color_px)
@@ -403,13 +480,15 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         color_w_mm = c_right_mm - c_left_mm
         color_h_mm = c_bot_mm - c_top_mm
         color_x = sku_x + sku_w_mm - color_w_mm - 3.0
-        color_y_top = sku_y_top + sku_h_mm + 26.0
+        # 颜色文字的顶部位置在 SKU 文字下方，间距 h_mm * 0.043
+        color_y_top = sku_y_top + sku_h_mm + h_mm * 0.043
         self._draw_text_top_left(pdf, color_x, color_y_top,
                                   color_text, 'CentSchbook', '', color_pt, pil_color, ppi)
 
         # 箱号文字（颜色左侧，圆角黑框）
         box_text = (f"BOX {sku_config.box_number['current_box']} "
                     f"OF {sku_config.box_number['total_boxes']}")
+        # 箱号文字框宽度是侧唛宽度的 12.7%，高度是侧唛高度的 3.8%，字体大小受限于框宽和框高的双重约束
         box_pt, pil_box = self._get_font_size_constrained(
             box_text, 'CentSchbook', w_mm * 0.127, h_mm * 0.038, ppi)
         bl, bt, br, bb = self._pil_bbox_mm(pil_box, box_text, ppi)
@@ -419,9 +498,9 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         box_y_top = color_y_top + (color_h_mm - box_h_mm) / 3
 
         pad_x = 5.0
-        pad_y_top = 4.9
-        pad_y_bot = 9.8
-        radius_mm = 12 * 25.4 / ppi
+        pad_y_top = 0.7 * 1.2 * 10
+        pad_y_bot = 0.7 * 1.2 * 10
+        radius_mm = 20 * 25.4 / ppi
         pdf.set_fill_color(0, 0, 0)
         pdf.rect(box_x - pad_x, box_y_top - pad_y_top,
                  box_w_mm + 2 * pad_x, box_h_mm + pad_y_top + pad_y_bot,
@@ -432,18 +511,20 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
                                   color=(r, g, b))
 
         # 宽侧唛标签（模板 + 内容叠加）
+        # 宽侧唛标签的宽度是SKU文字宽度的93% 
         label_w_mm = sku_w_mm * 0.93
         label_h_mm = label_w_mm * 868 / 4140
         label_x = sku_x + sku_w_mm * 0.07
-        label_y = box_y_top + box_h_mm + h_mm * 0.14
+        label_y = box_y_top + box_h_mm + h_mm * 0.15
         pdf.image(self.resources['icon_side_label_wide'],
                   x=label_x, y=label_y, w=label_w_mm, h=label_h_mm)
 
         gw_text = (f"G.W./N.W. : {sku_config.side_text['gw_value']} / "
                    f"{sku_config.side_text['nw_value']} LBS")
-        box_size_text = (f"BOX SIZE : {sku_config.l_cm:.1f}\" x "
-                         f"{sku_config.w_cm:.1f}\" x {sku_config.h_cm:.1f}\"")
+        box_size_text = (f"BOX SIZE : {sku_config.l_in:.1f}\" x "
+                         f"{sku_config.w_in:.1f}\" x {sku_config.h_in:.1f}\"")
 
+        # 标签内容叠加（SKU 代码、SN 码、毛重净重、箱子尺寸）
         self._draw_label_overlay(
             pdf, sku_config,
             label_x, label_y, label_w_mm, label_h_mm,
@@ -453,45 +534,65 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
             bc2_xf=0.855, bc2_yf=0.05, bc2_wf=0.14,  bc2_hf=0.26,
             bar_yf=0.78,  bar_hf=0.18,
             gw_text=gw_text,  gw_xf=0.023, gw_yf=0.13, gw_hf=0.182,
-            box_text=box_size_text, box_xf=0.023, box_yf=0.48, box_hf=0.182,
+            box_text=box_size_text, box_xf=0.023, box_yf=0.57, box_hf=0.182,
+            origin_yf = 0.53 # 产地文字的 y 位置相对于标签高度的比例（宽侧唛使用默认值）
         )
 
     def _draw_side_narrow(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
-                          ppi, px_per_mm, webside_y, webside_h_mm):
+                          ppi, px_per_mm):
         """窄侧唛布局（w_cm <= h_cm）"""
 
+        # 网址图标
+        webside_path = self.resources['icon_webside']
+        webside_w_mm = w_mm * 0.5
+        with Image.open(webside_path) as img:
+            ws_orig_w, ws_orig_h = img.size
+        webside_h_mm = webside_w_mm * ws_orig_h / ws_orig_w
+        webside_x = x_mm + (w_mm - webside_w_mm) / 2
+        # 网址图标的顶部位置在侧唛顶部下方的 5% 处
+        webside_y = y_mm + h_mm * 0.05
+        pdf.image(webside_path, x=webside_x, y=webside_y,
+                  w=webside_w_mm, h=webside_h_mm)
+        
+        
+        
+        print("高度大约30厘米，可以显示侧唛的线描图，使用窄侧唛的线描图布局")
+        
         # 线描图（居中，网址下方）
         if hasattr(sku_config, 'img_line_drawing') and sku_config.img_line_drawing is not None:
             line_path = sku_config.img_line_drawing
         else:
             line_path = self.resources['line_drawing']
         line_h_mm = h_mm * 0.46
-        with Image.open(line_path) as img:
-            l_orig_w, l_orig_h = img.size
+        l_orig_w, l_orig_h = self._get_image_size(line_path)
         line_w_mm = line_h_mm * l_orig_w / l_orig_h
         line_x = x_mm + (w_mm - line_w_mm) / 2
         line_y = webside_y + webside_h_mm + 30.0
-        pdf.image(line_path, x=line_x, y=line_y, w=line_w_mm, h=line_h_mm)
+        pdf.image(self._prepare_image_for_fpdf(line_path), x=line_x, y=line_y, w=line_w_mm, h=line_h_mm)
 
+        # 底部斜条纹的下边缘位置
+        bottom_margin_mm = h_mm * 0.23
+        
+        # 底部斜纹条
+        stripe_height_mm = 15.0
+        stripe_width_mm = 30.0
+        stripe_y = y_mm + h_mm - bottom_margin_mm - stripe_height_mm
+        self._draw_diagonal_stripes_pdf(pdf, x_mm, stripe_y, w_mm, stripe_height_mm, stripe_width_mm)
+
+        bottom_area_top = y_mm + h_mm - bottom_margin_mm
+        
         # SKU 文字（居中，线描图下方）
         sku_text = sku_config.sku_name
         sku_pt, pil_sku = self._get_font_size_constrained(
             sku_text, 'CentSchbook', w_mm * 0.9, h_mm * 0.12, ppi)
         sl, st, sr, sb = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_text_w = sr - sl
-        sku_text_y = line_y + line_h_mm + 30.0
+        sku_text_h = sb - st
+        # SKU 文字与斜纹条之间间距 5% 的侧唛高度
+        sku_text_y = stripe_y - sku_text_h - h_mm * 0.03 
         sku_text_x = x_mm + (w_mm - sku_text_w) / 2
         self._draw_text_top_left(pdf, sku_text_x, sku_text_y,
                                   sku_text, 'CentSchbook', '', sku_pt, pil_sku, ppi)
-
-        # 底部斜纹条（简化为纯黑色矩形）
-        stripe_height_mm = 12.0
-        bottom_margin_mm = h_mm * 0.21
-        stripe_y = y_mm + h_mm - bottom_margin_mm - stripe_height_mm
-        pdf.set_fill_color(0, 0, 0)
-        pdf.rect(x_mm, stripe_y, w_mm, stripe_height_mm, style='F')
-
-        bottom_area_top = y_mm + h_mm - bottom_margin_mm
 
         # 窄侧唛标签（右侧）
         label_h_mm = w_mm * 0.15
@@ -509,6 +610,7 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
             bc1_xf=0.05,  bc1_yf=0.04, bc1_wf=0.533, bc1_hf=0.28,
             bc2_xf=0.60,  bc2_yf=0.04, bc2_wf=0.36,  bc2_hf=0.28,
             bar_yf=0.88,  bar_hf=0.12,
+            origin_yf=0.2 # 产地文字的 y 位置相对于标签高度的比例（窄侧唛需要微调）
         )
 
         # 左侧信息区域（毛重净重、箱子尺寸）
@@ -534,9 +636,9 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         gw_lbl_y = info_center_y - vertical_gap / 2 - gw_lbl_h * 1.3
 
         pad_x = 3.0
-        pad_y_top = 4.9
-        pad_y_bot = 9.8
-        radius_mm = 16 * 25.4 / ppi
+        pad_y_top = 0.7 * 1.2 * 10
+        pad_y_bot = 0.7 * 1.2 * 10
+        radius_mm = 20 * 25.4 / ppi
         pdf.set_fill_color(0, 0, 0)
         pdf.rect(info_x - pad_x, gw_lbl_y - pad_y_top,
                  gw_lbl_w + 2 * pad_x, gw_lbl_h + pad_y_top + pad_y_bot,
@@ -572,9 +674,153 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
                                   color=(r, g, b))
 
         # BOX SIZE 值
-        box_val_text = (f'{sku_config.l_cm:.1f}" x '
-                        f'{sku_config.w_cm:.1f}" x '
-                        f'{sku_config.h_cm:.1f}"')
+        box_val_text = (f'{sku_config.l_in:.1f}" x '
+                        f'{sku_config.w_in:.1f}" x '
+                        f'{sku_config.h_in:.1f}"')
+        bvl, bvt, bvr, bvb = self._pil_bbox_mm(pil_val, box_val_text, ppi)
+        bval_h = bvb - bvt
+        box_val_center_y = box_lbl_y + box_lbl_h / 2
+        box_val_y = box_val_center_y - bval_h / 2
+        self._draw_text_top_left(pdf, gw_value_x, box_val_y,
+                                  box_val_text, 'CentSchbook', '', value_font_pt, pil_val, ppi)
+
+        # 虚线（两行文字中间）
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(0.3)
+        dash_x = x_mm + w_mm * 0.101
+        end_x = dash_x + w_mm * 0.44
+        cx = dash_x
+        while cx < end_x:
+            pdf.line(cx, info_center_y, min(cx + 2.5, end_x), info_center_y)
+            cx += 5.0
+            
+    def _draw_side_low(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
+                          ppi, px_per_mm):
+        """窄侧唛布局（w_cm <= h_cm）"""
+
+        # 网址图标
+        webside_path = self.resources['icon_webside']
+        webside_w_mm = w_mm * 0.5
+        with Image.open(webside_path) as img:
+            ws_orig_w, ws_orig_h = img.size
+        webside_h_mm = webside_w_mm * ws_orig_h / ws_orig_w
+        webside_x = x_mm + (w_mm - webside_w_mm) / 2
+        # 网址图标的顶部位置在侧唛顶部下方的 5% 处
+        webside_y = y_mm + h_mm * 0.05
+        pdf.image(webside_path, x=webside_x, y=webside_y,
+                  w=webside_w_mm, h=webside_h_mm)
+        
+
+        # 底部斜条纹的下边缘位置
+        bottom_margin_mm = h_mm * 0.47
+        
+        # 底部斜纹条
+        stripe_height_mm = 15.0
+        stripe_width_mm = 30.0
+        stripe_y = y_mm + h_mm - bottom_margin_mm - stripe_height_mm
+        self._draw_diagonal_stripes_pdf(pdf, x_mm, stripe_y, w_mm, stripe_height_mm, stripe_width_mm)
+
+        bottom_area_top = y_mm + h_mm - bottom_margin_mm
+        
+        # SKU 文字（居中，条纹上方）
+        sku_text = sku_config.sku_name
+        sku_pt, pil_sku = self._get_font_size_constrained(
+            sku_text, 'CentSchbook', w_mm * 0.83, h_mm * 0.23, ppi)
+        sl, st, sr, sb = self._pil_bbox_mm(pil_sku, sku_text, ppi)
+        sku_text_w = sr - sl
+        sku_text_h = sb - st
+        
+        # SKU 文字与斜纹条之间间距 10% 的侧唛高度
+        sku_text_y = stripe_y - sku_text_h - h_mm * 0.08 
+        sku_text_x = x_mm + (w_mm - sku_text_w) / 2
+        self._draw_text_top_left(pdf, sku_text_x, sku_text_y,
+                                  sku_text, 'CentSchbook', '', sku_pt, pil_sku, ppi)
+
+        # 窄侧唛标签（右侧）
+        label_h_mm = w_mm * 0.15
+        label_w_mm = label_h_mm * 2076 / 1073
+        label_y = bottom_area_top + (bottom_margin_mm - label_h_mm) / 2
+        label_x = x_mm + w_mm / 2 + (w_mm / 2 - label_w_mm) / 2
+        pdf.image(self.resources['icon_side_label_narrow'],
+                  x=label_x, y=label_y, w=label_w_mm, h=label_h_mm)
+
+        self._draw_label_overlay(
+            pdf, sku_config,
+            label_x, label_y, label_w_mm, label_h_mm,
+            barcode1_text=sku_config.sku_name,
+            barcode2_text=sku_config.side_text['sn_code'],
+            bc1_xf=0.05,  bc1_yf=0.04, bc1_wf=0.533, bc1_hf=0.28,
+            bc2_xf=0.60,  bc2_yf=0.04, bc2_wf=0.36,  bc2_hf=0.28,
+            bar_yf=0.88,  bar_hf=0.12,
+            origin_yf=0.2 # 产地文字的 y 位置相对于标签高度的比例（窄侧唛需要微调）
+        )
+
+        # 左侧信息区域（毛重净重、箱子尺寸）
+        info_x = x_mm + w_mm * 0.0987
+        info_center_y = bottom_area_top + bottom_margin_mm / 2
+        vertical_gap = 26.0
+
+        # 加外框的字体大小，受限于侧唛高度的 6.8%
+        label_font_h_mm = h_mm * 0.068
+        label_font_px = int(label_font_h_mm * px_per_mm)
+        label_font_pt = label_font_px * 72.0 / ppi
+        pil_lbl = ImageFont.truetype(self.font_paths['CentSchbook'], label_font_px)
+
+        # 值字体大小，受限于侧唛高度的 5%
+        value_font_h_mm = h_mm * 0.05
+        value_font_px = int(value_font_h_mm * px_per_mm)
+        value_font_pt = value_font_px * 72.0 / ppi
+        pil_val = ImageFont.truetype(self.font_paths['CentSchbook'], value_font_px)
+
+        # G.W./N.W. 标签（黑框）
+        gw_label = "G.W./N.W."
+        gl, gt, gr, gb = self._pil_bbox_mm(pil_lbl, gw_label, ppi)
+        gw_lbl_w = gr - gl
+        gw_lbl_h = gb - gt
+        gw_lbl_y = info_center_y - vertical_gap / 2 - gw_lbl_h * 1.3
+
+        pad_x = 3.0
+        pad_y_top = 0.7 * 1.2 * 10
+        pad_y_bot = 0.7 * 1.2 * 10
+        radius_mm = 20 * 25.4 / ppi
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(info_x - pad_x, gw_lbl_y - pad_y_top,
+                 gw_lbl_w + 2 * pad_x, gw_lbl_h + pad_y_top + pad_y_bot,
+                 style='F', round_corners=True, corner_radius=radius_mm)
+        r, g, b = sku_config.background_color
+        self._draw_text_top_left(pdf, info_x, gw_lbl_y,
+                                  gw_label, 'CentSchbook', '', label_font_pt, pil_lbl, ppi,
+                                  color=(r, g, b))
+
+        # G.W./N.W. 值
+        gw_value = (f"{sku_config.side_text['gw_value']} / "
+                    f"{sku_config.side_text['nw_value']} LBS")
+        vl, vt, vr, vb = self._pil_bbox_mm(pil_val, gw_value, ppi)
+        val_h = vb - vt
+        gw_value_x = info_x + gw_lbl_w + 20.0
+        gw_val_center_y = gw_lbl_y + gw_lbl_h / 2
+        gw_val_y = gw_val_center_y - val_h / 2
+        self._draw_text_top_left(pdf, gw_value_x, gw_val_y,
+                                  gw_value, 'CentSchbook', '', value_font_pt, pil_val, ppi)
+
+        # BOX SIZE 标签（黑框）
+        box_label = "BOX SIZE"
+        bl2, bt2, br2, bb2 = self._pil_bbox_mm(pil_lbl, box_label, ppi)
+        box_lbl_w = br2 - bl2
+        box_lbl_h = bb2 - bt2
+        box_lbl_y = info_center_y + vertical_gap / 2
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(info_x - pad_x, box_lbl_y - pad_y_top,
+                 box_lbl_w + 2 * pad_x, box_lbl_h + pad_y_top + pad_y_bot,
+                 style='F', round_corners=True, corner_radius=radius_mm)
+        self._draw_text_top_left(pdf, info_x, box_lbl_y,
+                                  box_label, 'CentSchbook', '', label_font_pt, pil_lbl, ppi,
+                                  color=(r, g, b))
+
+        # BOX SIZE 值
+        box_val_text = (f'{sku_config.l_in:.1f}" x '
+                        f'{sku_config.w_in:.1f}" x '
+                        f'{sku_config.h_in:.1f}"')
         bvl, bvt, bvr, bvb = self._pil_bbox_mm(pil_val, box_val_text, ppi)
         bval_h = bvb - bvt
         box_val_center_y = box_lbl_y + box_lbl_h / 2
@@ -600,7 +846,8 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
                              bc2_xf, bc2_yf, bc2_wf, bc2_hf,
                              bar_yf, bar_hf,
                              gw_text=None, gw_xf=None, gw_yf=None, gw_hf=None,
-                             box_text=None, box_xf=None, box_yf=None, box_hf=None):
+                             box_text=None, box_xf=None, box_yf=None, box_hf=None,
+                             origin_yf=0.2):
         """在标签模板上叠加绘制动态内容"""
         ppi = sku_config.ppi
         px_per_mm = ppi / 25.4
@@ -655,15 +902,16 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         bar_y = label_y + label_h * bar_yf
         bar_h = label_h * bar_hf
         pdf.set_fill_color(0, 0, 0)
-        pdf.rect(label_x, bar_y, label_w, bar_h, style='F')
+        # 这里不需要画底部黑条，因为标签模板已经包含了黑色底条的设计元素，直接在上面绘制文字即可。
+        # pdf.rect(label_x, bar_y, label_w, bar_h, style='F')
 
         origin_text = sku_config.side_text.get('origin_text', 'MADE IN CHINA')
-        font_h_mm = bar_h * 0.5
+        font_h_mm = bar_h * 0.8
         font_px = int(font_h_mm * px_per_mm)
         font_pt = font_px * 72.0 / ppi
         if font_px >= 4:
             pil_orig = ImageFont.truetype(self.font_paths['CentSchbook'], font_px)
-            origin_y = bar_y + bar_h * 0.2
+            origin_y = bar_y + bar_h * origin_yf
             r, g, b = sku_config.background_color
             self._draw_text_top_center(
                 pdf, label_x + label_w / 2, origin_y,

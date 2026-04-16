@@ -410,10 +410,10 @@ with tab_single:
 
         st.markdown("**线描图**（Barberpub 对开盖和 Exacme双圈埋地蹦床专用背景）")
         line_drawing_file = st.file_uploader(
-            "上传线描图 (PNG / JPG)",
-            type=["png", "jpg", "jpeg"],
+            "上传线描图 (PNG / JPG / PDF矢量)",
+            type=["png", "jpg", "jpeg", "pdf"],
             key="line_drawing_uploader",
-            help="Barberpub 对开盖和 Exacme双圈埋地蹦床样式专用背景图"
+            help="Barberpub 对开盖和 Exacme双圈埋地蹦床样式专用背景图，支持PDF矢量图"
         )
         if line_drawing_file is not None:
             import tempfile
@@ -422,7 +422,10 @@ with tab_single:
             tmp.write(line_drawing_file.read())
             tmp.close()
             style_params['img_line_drawing'] = Path(tmp.name)
-            st.image(line_drawing_file, caption="线描图预览", width='stretch')
+            if suffix.lower() == '.pdf':
+                st.info("已上传 PDF 矢量线描图，预览不可用，生成时将以矢量方式嵌入。")
+            else:
+                st.image(line_drawing_file, caption="线描图预览", width='stretch')
 
     # ── 新市场专用参数（折叠区块）──
     st.markdown("---")
