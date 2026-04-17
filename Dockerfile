@@ -1,9 +1,13 @@
 # 锁定 Python 3.12.12 精简版镜像
 FROM python:3.12.12-slim
 
-# 1. 【新增】极速换源：将 Debian 的 apt 源改为腾讯云内网源
-# 注意：python:3.12-slim 基于 Debian 12 (bookworm)，其源配置文件在 /etc/apt/sources.list.d/debian.sources
-RUN sed -i 's/deb.debian.org/mirrors.tencentyun.com/g' /etc/apt/sources.list.d/debian.sources
+# 1. 换国内 apt 源（兼容 Debian bookworm/trixie 两种格式）
+#    新版 Debian 用 DEB822 格式（.sources），旧版用 sources.list
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources; \
+    else \
+        sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list; \
+    fi
 
 # 2. 安装系统依赖
 RUN apt-get update && apt-get install -y git dos2unix && rm -rf /var/lib/apt/lists/*
