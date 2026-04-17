@@ -334,7 +334,7 @@ class MComboVerticalStyle(BoxMarkStyle):
         color_text = str(sku_config.color)
         color_size_px = int(h_mm * px_per_mm * 0.0382)
         color_size_pt = color_size_px * 72.0 / ppi
-        pil_color = ImageFont.truetype(self.font_paths['AvantGardeLT-Demi'], color_size_px)
+        pil_color = ImageFont.truetype(self.font_paths['Calibri-Bold'], color_size_px)
 
         _, top_c, _, bottom_c = self._pil_bbox_mm(pil_color, color_text, ppi)
         left_c, _, right_c, _ = self._pil_bbox_mm(pil_color, color_text, ppi)
@@ -359,7 +359,7 @@ class MComboVerticalStyle(BoxMarkStyle):
                  style='F', round_corners=True, corner_radius=radius_mm)
 
         self._draw_text_top_left(pdf, color_x, color_y_top, color_text,
-                                 'AvantGardeLT-Demi', '', color_size_pt, pil_color, ppi,
+                                 'Calibri-Bold', '', color_size_pt, pil_color, ppi,
                                  color=(161, 142, 102))
 
         # ── 3. 产品名称 + 装饰椭圆 + 尺寸文字 ──────────────────────────────────
