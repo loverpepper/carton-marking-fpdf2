@@ -10,6 +10,7 @@ from style_base import StyleRegistry
 import style_mcombo_standard
 import style_mcombo_vertical
 import style_barberpub_topandbottom
+import style_barberpub_topandbottom_manicure
 import style_barberpub_doubleopening
 import style_barberpub_fulloverlap
 import style_exacme_fulloverlap

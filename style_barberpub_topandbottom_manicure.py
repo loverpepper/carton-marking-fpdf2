@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Barberpub 天地盖样式 - fpdf2 版
+Barberpub 美甲桌天地盖样式 - fpdf2 版
 """
 
 from fpdf import FPDF
@@ -14,13 +14,13 @@ from style_base import BoxMarkStyle, StyleRegistry
 
 @StyleRegistry.register
 class BarberpubTopAndBottomStyle(BoxMarkStyle):
-    """Barberpub 天地盖样式 """
+    """Barberpub 美甲桌天地盖样式 """
 
     def get_style_name(self):
-        return "barberpub_topandbottom"
+        return "barberpub_topandbottom_manicure"
 
     def get_style_description(self):
-        return "Barberpub 推车类天地盖箱唛样式"
+        return "Barberpub 美甲桌天地盖箱唛样式"
 
     def get_required_params(self):
         return [
@@ -244,12 +244,10 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
 
         def _render():
             # ── 区域 A: Logo 元素（加入外层容器，space-between 上锚点）────────
-            logo_h_mm = h_mm * 0.26
-            logo_w_mm, _ = self._img_dims_mm(
-                self.resources["icon_logo"], height_mm=logo_h_mm
-            )
+            logo_w_mm = w_mm * 0.09
+
             logo_elem = engine.Image(
-                self.resources["icon_logo"], width=logo_w_mm, height=logo_h_mm
+                self.resources["icon_logo"], width=logo_w_mm
             )
 
             # ── 公共参数 ──────────────────────────────────────────────────────
@@ -261,6 +259,7 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
 
             # ── 文字内容 ──────────────────────────────────────────────────────
             sku_text = sku_config.sku_name
+            color_text = f"({sku_config.color.upper()})"
             gw_str = "G.W./N.W."
             weight_str = (
                 f"{sku_config.side_text['gw_value']} / "
@@ -278,23 +277,23 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
             info_lbl_pt, _ = self._get_font_size(
                 ref_label,
                 "CentSchbook",
-                w_mm * 0.12,  # 最大宽度 = 面板宽的 12%
+                w_mm * 0.06,  # 最大宽度 = 面板宽的 6%
                 ppi,
-                max_height_mm=h_mm * 0.08,
+                max_height_mm=h_mm * 0.15,
             )
             # 数值（重量 / 尺寸）：取较长者作为宽度基准
             ref_val = weight_str if len(weight_str) >= len(dim_str) else dim_str
             info_val_pt, _ = self._get_font_size(
                 ref_val,
                 "CentSchbook",
-                w_mm * 0.23,  # 最大宽度 = 面板宽的 23%
+                w_mm * 0.10,  # 最大宽度 = 面板宽的 10%
                 ppi,
-                max_height_mm=h_mm * 0.07,
+                max_height_mm=h_mm * 0.13,
             )
 
             # ── SKU 文字元素 ──────────────────────────────────────────────────
             sku_pt, _ = self._get_font_size(
-                sku_text, "CentSchbook", w_mm * 0.77, ppi, max_size=2000
+                sku_text, "CentSchbook", w_mm * 0.51, ppi, max_size=2000
             )
             sku_elem = engine.Text(
                 sku_text,
@@ -305,13 +304,16 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
                 color=(0, 0, 0),
             )
 
-            # ── 虚线元素（宽度与 SKU 文字内容等宽）───────────────────────────
-            line_w = max(0.3, h_mm * 0.003)
-            dash_elem = engine.DashedLine(
-                width=sku_elem.width,
-                dash_len=3.0,
-                dash_gap=2.5,
-                line_width=line_w,
+            # ── SKU 旁边颜色文字元素 ──────────────────────────────────────────────────
+            color_pt, _ = self._get_font_size(
+                color_text, "CentSchbook", w_mm * 0.10, ppi, max_size=2000
+            )
+            color_elem = engine.Text(
+                color_text,
+                "CentSchbook",
+                color_pt,
+                font_path=font_path,
+                ppi=ppi,
                 color=(0, 0, 0),
             )
 
@@ -379,34 +381,45 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
                 spacing=2 * pad_x + 6.0,
                 align="center",
             )
-
-            # ── 组合水平容器: [gw_row | box_row] ─────────────────────────────
-            info_row = engine.Row(
-                [gw_row, box_row],
-                spacing=w_mm * 0.08,
-                align="center",
+            
+            # ── 虚线元素（宽度与 SKU 文字内容等宽）───────────────────────────
+            line_w = max(0.3, h_mm * 0.003)
+            dash_elem = engine.DashedLine(
+                width=box_row.width, # 虚线宽度与 box_row 内容等宽
+                dash_len=3.0, # 虚线段长度
+                dash_gap=2.5, # 虚线间隔
+                line_width=line_w, # 线宽
+                color=(0, 0, 0),
+                nudge_y=pad_y,  # 补偿 gw_label 背景框 padding_y 向下溢出，使虚线两侧间距对称
             )
 
-            # ── 垂直容器: SKU文字 / 虚线 / 信息行 ────────────────────────────
-            main_col = engine.Column(
-                [sku_elem, dash_elem, info_row],
+            # ── 组合垂直容器: [gw_row |虚线| box_row] ─────────────────────────────
+            info_col = engine.Column(
+                [gw_row, dash_elem, box_row],
+                spacing=h_mm * 0.09,
+                align="left",
+                nudge_y = - pad_y
+            )
+
+            # ── 水平容器: SKU文字 / 颜色 ────────────────────────────
+            sku_color_row = engine.Row(
+                [sku_elem, color_elem],
                 spacing=h_mm * 0.05,
-                align="center",
-                nudge_y = - h_mm * 0.02, # 整体向上微调 2% 高度，优化视觉位置
+                align="bottom",
             )
 
-            # ── 外层容器: Logo 与 main_col space-between ──────────────────────
+            # ── 外层容器: Logo 与 sku_color 与 info_col space-between ──────────────────────
             # fixed_height=h_mm，上下 padding=25mm(2.5cm)，水平居中
-            outer_col = engine.Column(
-                [logo_elem, main_col],
+            outer_row = engine.Row(
+                [logo_elem, sku_color_row, info_col],
                 justify="space-between",
                 fixed_height=h_mm,
                 fixed_width=w_mm,
-                padding_y= h_mm * 0.12, # 上下内边距 12% 高度，确保 Logo 与信息区不贴边
+                padding_x= w_mm * 0.03, # 上下内边距 12% 高度，确保 Logo 与信息区不贴边
                 align="center",
             )
-            outer_col.layout(x_mm, y_mm)
-            outer_col.render(pdf)
+            outer_row.layout(x_mm, y_mm)
+            outer_row.render(pdf)
 
         if rotate_180:
             cx = x_mm + w_mm / 2.0
@@ -607,10 +620,10 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
         绘制左/右侧面板。
 
         布局结构（垂直容器居中于自然画布）：
-          ┌─────────────────────────────┐
-          │          SKU 文字            │
-          ├─────────────────────────────┤
-          │   网址图     │   侧唛标签图   │  ← 水平容器
+          ┌───────────────────────────── ┐
+          │  SKU 文字         │          │  
+          ├──────────────────│ 侧唛标签图 │
+          │   网址图          │          │  ← 水平容器
           └─────────────────────────────┘
         """
         ppi = sku_config.ppi
@@ -619,13 +632,11 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
         nat_h = w_mm  # 自然高 = 宽方向
         cx = x_mm + w_mm / 2.0
         cy = y_mm + h_mm / 2.0
-        nat_x = cx - nat_w / 2.0
-        nat_y = cy - nat_h / 2.0
 
         # --- SKU 文字元素 ---
         sku_text = sku_config.sku_name
         sku_pt, _ = self._get_font_size(
-            sku_text, "CentSchbook", nat_w * 0.88, ppi, max_height_mm=nat_h * 0.42
+            sku_text, "CentSchbook", nat_w * 0.65, ppi, max_height_mm=nat_h * 0.42
         )
         sku_elem = engine.Text(
             sku_text,
@@ -637,37 +648,40 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
         )
 
         # --- 底部图片（统一高度）---
-        web_w_mm = nat_w * 0.53
+        web_w_mm = nat_w * 0.55
         web_path = self.resources["icon_webside"]
         _, web_h_mm = self._img_dims_mm(web_path, width_mm=web_w_mm)
         web_elem = engine.Image(web_path, width=web_w_mm, height=web_h_mm)
 
-        label_w_mm = nat_w * 0.29
+        label_w_mm = nat_w * 0.23
         label_path = self.resources["icon_side_label"]
         _, label_h_mm = self._img_dims_mm(label_path, width_mm=label_w_mm)
         label_elem = engine.Image(label_path, width=label_w_mm, height=label_h_mm)
 
-        # --- 水平容器: 网址图 | 标签图 ---
-        images_row = engine.Row(
-            [web_elem, label_elem],
-            spacing=nat_w * 0.04,
+        # --- 垂直容器: SKU文字 | 网址图  标签图 ---
+        sku_website_col = engine.Column(
+            [sku_elem,
+             web_elem],
+            spacing=nat_h * 0.09,
             align="center",
         )
 
-        # --- 垂直容器: SKU文字 / 图片行（水平居中）---
-        main_col = engine.Column(
-            [sku_elem, images_row],
-            spacing=nat_h * 0.08,
+        # --- 水平容器: SKU文字 + 网址图 | 标签图 ---
+        main_row = engine.Row(
+            [sku_website_col, label_elem],
+            fixed_width= nat_w,
+            spacing=nat_w * 0.03,
             align="center",
+            justify="center",
         )
 
-        # 整体在自然画布内居中
-        col_x = nat_x + (nat_w - main_col.width) / 2.0
-        col_y = nat_y + (nat_h - main_col.height) / 2.0
+        # 自然坐标系下，内容在面板内水平/垂直居中
+        row_x = cx - main_row.width / 2.0
+        row_y = cy - main_row.height / 2.0
 
         with pdf.rotation(rotation_deg, cx, cy):
-            main_col.layout(col_x, col_y)
-            main_col.render(pdf)
+            main_row.layout(row_x, row_y)
+            main_row.render(pdf)
             # 在标签图上叠加条形码
             self._draw_side_label_barcodes(
                 pdf,

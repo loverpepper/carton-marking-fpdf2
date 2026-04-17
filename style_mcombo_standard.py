@@ -122,8 +122,8 @@ class MComboStandardStyle(BoxMarkStyle):
         """加载字体路径"""
         font_base = self.base_dir / 'assets' / 'Mcombo' / '样式一' / '箱唛字体'
         self.font_paths = {
-            'Arial Bold': str(font_base / 'calibri-bold.ttf'),
-            'Arial':      str(font_base / 'avantgardelt-demi.ttf'),
+            'Calibri-Bold':      str(font_base / 'calibri-bold.ttf'),
+            'AvantGardeLT-Demi': str(font_base / 'avantgardelt-demi.ttf'),
         }
 
     # ── fpdf2 字体注册 ──────────────────────────────────────────────────────────
@@ -131,8 +131,8 @@ class MComboStandardStyle(BoxMarkStyle):
     def register_fonts(self, pdf: FPDF):
         """向 FPDF 对象注册本样式使用的所有字体"""
         # Calibri-Bold / AvantGardeLT-Demi 是 Illustrator 可识别的 PostScript 名
-        pdf.add_font('Calibri-Bold',      '', self.font_paths['Arial Bold'])
-        pdf.add_font('AvantGardeLT-Demi', '', self.font_paths['Arial'])
+        pdf.add_font('Calibri-Bold',      '', self.font_paths['Calibri-Bold'])
+        pdf.add_font('AvantGardeLT-Demi', '', self.font_paths['AvantGardeLT-Demi'])
 
     # ── 核心绘制入口 ────────────────────────────────────────────────────────────
 
@@ -340,7 +340,7 @@ class MComboStandardStyle(BoxMarkStyle):
         # 字号比例：51/1332 × h_px  (与原始一致)
         color_size_px = int(h_mm * px_per_mm * 51 / 1332)
         color_size_pt = color_size_px * 72.0 / ppi
-        pil_color = ImageFont.truetype(self.font_paths['Arial Bold'], color_size_px)
+        pil_color = ImageFont.truetype(self.font_paths['Calibri-Bold'], color_size_px)
 
         _, top_c, _, bottom_c = self._pil_bbox_mm(pil_color, color_text, ppi)
         left_c, _, right_c, _ = self._pil_bbox_mm(pil_color, color_text, ppi)
@@ -379,20 +379,20 @@ class MComboStandardStyle(BoxMarkStyle):
         size_size_px    = int(h_mm * px_per_mm * 60  / 1332)
 
         # 产品名宽度不超过面板 85%
-        pil_product = ImageFont.truetype(self.font_paths['Arial'], product_size_px)
+        pil_product = ImageFont.truetype(self.font_paths['AvantGardeLT-Demi'], product_size_px)
         p_left, p_top, p_right, p_bottom = pil_product.getbbox(product_text)
         product_w_px = p_right - p_left
         max_product_w_px = int(w_mm * px_per_mm * 0.85)
         if product_w_px > max_product_w_px:
             product_size_px = int(product_size_px * max_product_w_px / product_w_px)
-            pil_product = ImageFont.truetype(self.font_paths['Arial'], product_size_px)
+            pil_product = ImageFont.truetype(self.font_paths['AvantGardeLT-Demi'], product_size_px)
             p_left, p_top, p_right, p_bottom = pil_product.getbbox(product_text)
             product_w_px = p_right - p_left
         product_size_pt = product_size_px * 72.0 / ppi
         product_w_mm = product_w_px / px_per_mm
         product_h_mm = (p_bottom - p_top) / px_per_mm
 
-        pil_size = ImageFont.truetype(self.font_paths['Arial Bold'], size_size_px)
+        pil_size = ImageFont.truetype(self.font_paths['Calibri-Bold'], size_size_px)
         s_left, s_top, s_right, s_bottom = pil_size.getbbox(size_text)
         size_w_mm = (s_right - s_left) / px_per_mm
         size_h_mm = (s_bottom - s_top) / px_per_mm
@@ -482,13 +482,13 @@ class MComboStandardStyle(BoxMarkStyle):
         sku_max_h_mm = 80.0
 
         sku_size_pt, pil_sku = self._get_font_size(
-            sku_text, 'Arial Bold', sku_max_w_mm, ppi)
+            sku_text, 'Calibri-Bold', sku_max_w_mm, ppi)
         _, sku_top, _, sku_bottom = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_h_mm = sku_bottom - sku_top
         # 若超出高度限制，按高宽比缩减
         if sku_h_mm > sku_max_h_mm:
             sku_size_pt, pil_sku = self._get_font_size(
-                sku_text, 'Arial Bold',
+                sku_text, 'Calibri-Bold',
                 sku_max_w_mm * sku_max_h_mm / sku_h_mm, ppi)
             _, sku_top, _, sku_bottom = self._pil_bbox_mm(pil_sku, sku_text, ppi)
             sku_h_mm = sku_bottom - sku_top
@@ -538,12 +538,12 @@ class MComboStandardStyle(BoxMarkStyle):
         sku_max_h_mm = 80.0   # 8 cm
 
         sku_size_pt, pil_sku = self._get_font_size(
-            sku_text, 'Arial Bold', sku_max_w_mm, ppi)
+            sku_text, 'Calibri-Bold', sku_max_w_mm, ppi)
         _, sku_top, _, sku_bottom = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_h_mm = sku_bottom - sku_top
         if sku_h_mm > sku_max_h_mm:
             sku_size_pt, pil_sku = self._get_font_size(
-                sku_text, 'Arial Bold',
+                sku_text, 'Calibri-Bold',
                 sku_max_w_mm * sku_max_h_mm / sku_h_mm, ppi)
 
         sku_area_left_mm  = 30.0               # 3cm
@@ -625,9 +625,9 @@ class MComboStandardStyle(BoxMarkStyle):
         bold_px    = int(h_mm * px_per_mm * 0.095)
         barcode_px = int(h_mm * px_per_mm * 0.058)
 
-        pil_label   = ImageFont.truetype(self.font_paths['Arial'],     label_px)
-        pil_bold    = ImageFont.truetype(self.font_paths['Arial Bold'], bold_px)
-        pil_barcode = ImageFont.truetype(self.font_paths['Arial Bold'], barcode_px)
+        pil_label   = ImageFont.truetype(self.font_paths['AvantGardeLT-Demi'], label_px)
+        pil_bold    = ImageFont.truetype(self.font_paths['Calibri-Bold'],      bold_px)
+        pil_barcode = ImageFont.truetype(self.font_paths['Calibri-Bold'],      barcode_px)
 
         label_pt   = label_px   * 72.0 / ppi
         bold_pt    = bold_px    * 72.0 / ppi
