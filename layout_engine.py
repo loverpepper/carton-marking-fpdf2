@@ -234,9 +234,9 @@ class Column(Element):
             width = max(c.width for c in children) if children else 0.0
             width += 2 * padding_x
 
-        if justify == "space-between" and fixed_height is None:
+        if justify in ("space-between", "center") and fixed_height is None:
             raise ValueError(
-                "❌ Column 使用 justify='space-between' 时必须指定 fixed_height"
+                f"❌ Column 使用 justify='{justify}' 时必须指定 fixed_height"
             )
 
         super().__init__(
@@ -254,20 +254,28 @@ class Column(Element):
 
     def layout(self, x, y, max_width=None):
         super().layout(x, y, max_width)
-        current_y = self.y
         actual_spacing = self.spacing
 
+        total_children_h = sum(c.height for c in self.children)
+        inner_h = self.height - 2 * self.padding_y
+
         if self.justify == "space-between" and len(self.children) > 1:
-            total_h = sum(c.height for c in self.children)
-            remaining = self.height - 2 * self.padding_y - total_h
+            remaining = inner_h - total_children_h
             actual_spacing = remaining / (len(self.children) - 1)
+            current_y = self.y
+        elif self.justify == "center":
+            total_content_h = total_children_h + actual_spacing * (len(self.children) - 1)
+            current_y = self.y + (inner_h - total_content_h) / 2
+        else:  # start
+            current_y = self.y
 
         for child in self.children:
-            offset_x = 0.0
             if self.align == "center":
                 offset_x = (self.width - 2 * self.padding_x - child.width) / 2
             elif self.align == "right":
                 offset_x = self.width - 2 * self.padding_x - child.width
+            else:  # "left" or default
+                offset_x = 0.0
             child.layout(self.x + offset_x, current_y)
             current_y += child.height + actual_spacing
 
@@ -304,9 +312,9 @@ class Row(Element):
         dynamic_width = total_children_w + total_spacing + 2 * padding_x
         width = float(fixed_width) if fixed_width is not None else dynamic_width
 
-        if justify == "space-between" and fixed_width is None:
+        if justify in ("space-between", "center") and fixed_width is None:
             raise ValueError(
-                "❌ Row 使用 justify='space-between' 时必须指定 fixed_width"
+                f"❌ Row 使用 justify='{justify}' 时必须指定 fixed_width"
             )
 
         super().__init__(
@@ -324,13 +332,20 @@ class Row(Element):
 
     def layout(self, x, y, max_width=0):
         super().layout(x, y, max_width)
-        current_x = self.x
         actual_spacing = self.spacing
 
+        total_children_w = sum(c.width for c in self.children)
+        inner_w = self.width - 2 * self.padding_x
+
         if self.justify == "space-between" and len(self.children) > 1:
-            total_w = sum(c.width for c in self.children)
-            remaining = self.width - 2 * self.padding_x - total_w
+            remaining = inner_w - total_children_w
             actual_spacing = remaining / (len(self.children) - 1)
+            current_x = self.x
+        elif self.justify == "center":
+            total_content_w = total_children_w + actual_spacing * (len(self.children) - 1)
+            current_x = self.x + (inner_w - total_content_w) / 2
+        else:  # start
+            current_x = self.x
 
         for child in self.children:
             offset_y = 0.0

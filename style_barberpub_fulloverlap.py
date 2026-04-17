@@ -5,9 +5,11 @@ Barberpub 全搭盖样式 - 将原有的 BoxMarkEngine 转换为样式类
 from fpdf import FPDF
 from PIL import Image, ImageDraw, ImageFont
 import pathlib
+import fitz  # PyMuPDF
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
 from general_functions import generate_barcode_image
+import layout_engine as engine
 
 
 @StyleRegistry.register
@@ -32,6 +34,8 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
             'icon_company':        res_base / '正唛公司信息.png',
             'icon_webside':        res_base / '侧唛网址.png',
             'icon_side_label':     res_base / '侧唛标签_窄.png',
+            'icon_side_label_narrow': res_base / '侧唛标签_窄.png',
+            'line_drawing': self.base_dir / 'assets' / 'Barberpub' / '对开盖' / '矢量文件' / '侧唛线描图.png',
             'icon_slogan':         res_base / '正唛宣传语.png',
             'icon_box_info':       res_base / '正唛多箱选择框.png',
         }
@@ -116,7 +120,7 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         """Return the resource file path (pathlib.Path)."""
         return self.resources[key]
 
-    def _get_font_size(self, text, font_key, target_width_mm, max_h_mm=None, *, ppi):
+    def _get_font_size(self, text, font_key, target_width_mm, ppi, max_h_mm=None):
         """Return (font_size_pt, pil_font) so text fits target_width_mm.
         Optionally constrain by max_h_mm."""
         path = self.font_paths[font_key]
@@ -126,6 +130,34 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         size_pt = size_px * 72.0 / ppi
         pil_font = ImageFont.truetype(path, size_px)
         return size_pt, pil_font
+
+    @staticmethod
+    def _get_image_size(path) -> tuple:
+        """获取图片尺寸 (width, height)，兼容 PDF 和光栅图片。"""
+        path = pathlib.Path(path)
+        if path.suffix.lower() == '.pdf':
+            doc = fitz.open(str(path))
+            rect = doc[0].rect
+            doc.close()
+            return rect.width, rect.height
+        with Image.open(path) as img:
+            return img.size
+
+    @staticmethod
+    def _prepare_image_for_fpdf(path):
+        """返回可直接传给 fpdf2 pdf.image() 的对象。"""
+        import tempfile, os
+        path = pathlib.Path(path)
+        if path.suffix.lower() == '.pdf':
+            doc = fitz.open(str(path))
+            page = doc[0]
+            svg_str = page.get_svg_image()
+            doc.close()
+            tmp_fd, tmp_path = tempfile.mkstemp(suffix='.svg')
+            os.write(tmp_fd, svg_str.encode('utf-8'))
+            os.close(tmp_fd)
+            return pathlib.Path(tmp_path)
+        return path
 
     @staticmethod
     def _pil_bbox_mm(pil_font, text, ppi):
@@ -219,7 +251,7 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         # 3. Product name (DroidSans, centred at 48% height)
         product_text = sku_config.product
         prod_pt, pil_prod = self._get_font_size(
-            product_text, 'DroidSans', w_mm * 0.78, h_mm * 0.28, ppi=ppi)
+            product_text, 'DroidSans', w_mm * 0.78, ppi, w_mm * 0.28)
         left_p, top_p, right_p, bottom_p = self._pil_bbox_mm(pil_prod, product_text, ppi)
         text_w_mm = right_p - left_p
         prod_h_mm = bottom_p - top_p
@@ -255,7 +287,7 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         # 6. SKU 代码（左下角，CentSchbook）
         sku_text = sku_config.sku_name
         sku_pt, pil_sku = self._get_font_size(
-            sku_text, 'CentSchbook', w_mm * 0.715, h_mm * 0.16, ppi=ppi)
+            sku_text, 'CentSchbook', w_mm * 0.715, ppi, h_mm * 0.16)
         _, sku_top_mm, _, sku_bot_mm = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_h_mm = sku_bot_mm - sku_top_mm
         sku_y_top = y_mm + h_mm - margin_bottom - sku_h_mm - 5.0
@@ -279,7 +311,7 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         box_text = (f"BOX {sku_config.box_number['current_box']} "
                     f"OF {sku_config.box_number['total_boxes']}")
         box_pt, pil_box = self._get_font_size(
-            box_text, 'CentSchbook', w_mm * 0.127, h_mm * 0.038, ppi=ppi)
+            box_text, 'CentSchbook', w_mm * 0.127, ppi, h_mm * 0.038)
         left_b, top_b, right_b, bot_b = self._pil_bbox_mm(pil_box, box_text, ppi)
         box_w_mm = right_b - left_b
         box_h_mm = bot_b - top_b
@@ -304,10 +336,25 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
     # ── 侧面面板 (vector) ────────────────────────────────────────────────────
 
     def _draw_side_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
-        """Draw side (侧唛) panel – content drawn rotated 90° into the cell."""
+        """Draw side (侧唛) panel – dispatches based on panel dimensions."""
         ppi = sku_config.ppi
         px_per_mm = ppi / 25.4
 
+        if w_mm > 400 and h_mm < 500:
+            # 宽大于40cm且高小于50cm，使用低高侧唛布局
+            self._draw_side_low(pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
+                                ppi, px_per_mm)
+        elif w_mm > 400 and h_mm >= 500:
+            # 宽大于40cm且高大于50cm，使用窄侧唛布局
+            self._draw_side_narrow(pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
+                                   ppi, px_per_mm)
+        else:
+            # 其余情况使用旋转宽侧唛布局
+            self._draw_side_wide(pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
+                                 ppi, px_per_mm)
+
+    def _draw_side_wide(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm, ppi, px_per_mm):
+        """原宽侧唛布局 – 内容旋转90°绘入竖向格子。"""
         # The side panel content is drawn in a landscape orientation
         # (width=h_mm, height=w_mm) then rotated 90° into the portrait cell.
         cw = h_mm   # content width
@@ -316,7 +363,7 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         # SKU text
         sku_text = sku_config.sku_name
         sku_pt, pil_sku = self._get_font_size(
-            sku_text, 'CentSchbook', cw * 0.92, ch * 0.55, ppi=ppi)
+            sku_text, 'CentSchbook', cw * 0.90, ppi, ch * 0.55)
         sl, st, sr, sb = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_text_w = sr - sl
         sku_text_h = sb - st
@@ -341,7 +388,7 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         total_h = sku_text_h + gap_sku_icons + bottom_icons_h
         start_y_content = (ch * 1.1 - total_h) / 2
 
-        margin_side = 30.0  # ~3cm
+        margin_side = 25.0  # ~2.5cm
 
         # Use pdf.rotation to draw landscape content rotated into portrait cell
         # Rotation centre = top-left of cell; rotate -90° (CCW) maps:
@@ -382,6 +429,295 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
                 bar_yf=0.88,  bar_hf=0.12,
             )
 
+    def _draw_side_low(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm, ppi, px_per_mm):
+        """侧唛布局：宽>40cm 且 高<50cm"""
+
+        # 网址图标
+        webside_path = self.resources['icon_webside']
+        webside_w_mm = w_mm * 0.5
+        with Image.open(webside_path) as img:
+            ws_orig_w, ws_orig_h = img.size
+        webside_h_mm = webside_w_mm * ws_orig_h / ws_orig_w
+        webside_x = x_mm + (w_mm - webside_w_mm) / 2
+        webside_y = y_mm + h_mm * 0.05
+        pdf.image(webside_path, x=webside_x, y=webside_y,
+                  w=webside_w_mm, h=webside_h_mm)
+
+        # 底部斜条纹的下边缘位置
+        bottom_margin_mm = h_mm * 0.47
+
+        # 底部斜纹条
+        stripe_height_mm = 15.0
+        stripe_width_mm = 30.0
+        stripe_y = y_mm + h_mm - bottom_margin_mm - stripe_height_mm
+        self._draw_diagonal_stripes_pdf(pdf, x_mm, stripe_y, w_mm, stripe_height_mm, stripe_width_mm)
+
+        bottom_area_top = y_mm + h_mm - bottom_margin_mm
+
+        # SKU 文字（居中，条纹上方）
+        sku_text = sku_config.sku_name
+        sku_pt, pil_sku = self._get_font_size(
+            sku_text, 'CentSchbook', w_mm * 0.83, ppi, h_mm * 0.23)
+        sl, st, sr, sb = self._pil_bbox_mm(pil_sku, sku_text, ppi)
+        sku_text_w = sr - sl
+        sku_text_h = sb - st
+
+        sku_text_y = stripe_y - sku_text_h - h_mm * 0.08
+        sku_text_x = x_mm + (w_mm - sku_text_w) / 2
+        self._draw_text_top_left(pdf, sku_text_x, sku_text_y,
+                                  sku_text, 'CentSchbook', '', sku_pt, pil_sku, ppi)
+
+        # 窄侧唛标签（右侧）
+        label_h_mm = w_mm * 0.15
+        label_w_mm = label_h_mm * 2076 / 1073
+        label_y = bottom_area_top + (bottom_margin_mm - label_h_mm) / 2
+        label_x = x_mm + w_mm / 2 + (w_mm / 2 - label_w_mm) / 2
+        pdf.image(self.resources['icon_side_label_narrow'],
+                  x=label_x, y=label_y, w=label_w_mm, h=label_h_mm)
+
+        self._draw_label_overlay(
+            pdf, sku_config,
+            label_x, label_y, label_w_mm, label_h_mm,
+            barcode1_text=sku_config.sku_name,
+            barcode2_text=sku_config.side_text['sn_code'],
+            bc1_xf=0.05,  bc1_yf=0.04, bc1_wf=0.533, bc1_hf=0.28,
+            bc2_xf=0.60,  bc2_yf=0.04, bc2_wf=0.36,  bc2_hf=0.28,
+            bar_yf=0.88,  bar_hf=0.12,
+        )
+
+        # 左侧信息区域（毛重净重、箱子尺寸）
+        info_x = x_mm + w_mm * 0.0987
+        info_center_y = bottom_area_top + bottom_margin_mm / 2
+        vertical_gap = 26.0
+
+        # 带外框的文字大小
+        label_font_h_mm = h_mm * 0.068
+        label_font_w_mm = w_mm * 0.13
+        label_font_pt, pil_lbl = self._get_font_size(
+            "G.W./N.W.", 'CentSchbook', label_font_w_mm, ppi, label_font_h_mm)
+
+        # 不带外框的文字大小
+        value_font_h_mm = h_mm * 0.05
+        value_font_w_mm = w_mm * 0.12
+        value_font_pt, pil_val = self._get_font_size(
+            "BOX SIZE", 'CentSchbook', value_font_w_mm, ppi, value_font_h_mm)
+
+        # G.W./N.W. 标签（黑框）
+        gw_label = "G.W./N.W."
+        gl, gt, gr, gb = self._pil_bbox_mm(pil_lbl, gw_label, ppi)
+        gw_lbl_w = gr - gl
+        gw_lbl_h = gb - gt
+        gw_lbl_y = info_center_y - vertical_gap / 2 - gw_lbl_h * 1.3
+
+        pad_x = 3.0
+        pad_y_top = 0.7 * 1.2 * 10
+        pad_y_bot = 0.7 * 1.2 * 10
+        radius_mm = 20 * 25.4 / ppi
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(info_x - pad_x, gw_lbl_y - pad_y_top,
+                 gw_lbl_w + 2 * pad_x, gw_lbl_h + pad_y_top + pad_y_bot,
+                 style='F', round_corners=True, corner_radius=radius_mm)
+        r, g, b = sku_config.background_color
+        self._draw_text_top_left(pdf, info_x, gw_lbl_y,
+                                  gw_label, 'CentSchbook', '', label_font_pt, pil_lbl, ppi,
+                                  color=(r, g, b))
+
+        # G.W./N.W. 值
+        gw_value = (f"{sku_config.side_text['gw_value']} / "
+                    f"{sku_config.side_text['nw_value']} LBS")
+        vl, vt, vr, vb = self._pil_bbox_mm(pil_val, gw_value, ppi)
+        val_h = vb - vt
+        gw_value_x = info_x + gw_lbl_w + 20.0
+        gw_val_center_y = gw_lbl_y + gw_lbl_h / 2
+        gw_val_y = gw_val_center_y - val_h / 2
+        self._draw_text_top_left(pdf, gw_value_x, gw_val_y,
+                                  gw_value, 'CentSchbook', '', value_font_pt, pil_val, ppi)
+
+        # BOX SIZE 标签（黑框）
+        box_label = "BOX SIZE"
+        bl2, bt2, br2, bb2 = self._pil_bbox_mm(pil_lbl, box_label, ppi)
+        box_lbl_w = br2 - bl2
+        box_lbl_h = bb2 - bt2
+        box_lbl_y = info_center_y + vertical_gap / 2
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(info_x - pad_x, box_lbl_y - pad_y_top,
+                 box_lbl_w + 2 * pad_x, box_lbl_h + pad_y_top + pad_y_bot,
+                 style='F', round_corners=True, corner_radius=radius_mm)
+        self._draw_text_top_left(pdf, info_x, box_lbl_y,
+                                  box_label, 'CentSchbook', '', label_font_pt, pil_lbl, ppi,
+                                  color=(r, g, b))
+
+        # BOX SIZE 值
+        box_val_text = (f'{sku_config.l_in:.1f}" x '
+                        f'{sku_config.w_in:.1f}" x '
+                        f'{sku_config.h_in:.1f}"')
+        bvl, bvt, bvr, bvb = self._pil_bbox_mm(pil_val, box_val_text, ppi)
+        bval_h = bvb - bvt
+        box_val_center_y = box_lbl_y + box_lbl_h / 2
+        box_val_y = box_val_center_y - bval_h / 2
+        self._draw_text_top_left(pdf, gw_value_x, box_val_y,
+                                  box_val_text, 'CentSchbook', '', value_font_pt, pil_val, ppi)
+
+        # 虚线（两行文字中间）
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(0.3)
+        dash_x = x_mm + w_mm * 0.101
+        end_x = dash_x + w_mm * 0.44
+        cx = dash_x
+        while cx < end_x:
+            pdf.line(cx, info_center_y, min(cx + 2.5, end_x), info_center_y)
+            cx += 5.0
+
+    def _draw_side_narrow(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm, ppi, px_per_mm):
+        """侧唛布局：宽>40cm 且 高>=50cm（含线描图）"""
+
+        # 网址图标
+        webside_path = self.resources['icon_webside']
+        webside_w_mm = w_mm * 0.5
+        with Image.open(webside_path) as img:
+            ws_orig_w, ws_orig_h = img.size
+        webside_h_mm = webside_w_mm * ws_orig_h / ws_orig_w
+        webside_x = x_mm + (w_mm - webside_w_mm) / 2
+        webside_y = y_mm + h_mm * 0.05
+        pdf.image(webside_path, x=webside_x, y=webside_y,
+                  w=webside_w_mm, h=webside_h_mm)
+
+        # 线描图（居中，网址下方）
+        if hasattr(sku_config, 'img_line_drawing') and sku_config.img_line_drawing is not None:
+            line_path = sku_config.img_line_drawing
+        else:
+            line_path = self.resources['line_drawing']
+        line_h_mm = h_mm * 0.46
+        l_orig_w, l_orig_h = self._get_image_size(line_path)
+        line_w_mm = line_h_mm * l_orig_w / l_orig_h
+        line_x = x_mm + (w_mm - line_w_mm) / 2
+        line_y = webside_y + webside_h_mm + 30.0
+        pdf.image(self._prepare_image_for_fpdf(line_path), x=line_x, y=line_y,
+                  w=line_w_mm, h=line_h_mm)
+
+        # 底部斜条纹的下边缘位置
+        bottom_margin_mm = h_mm * 0.23
+
+        # 底部斜纹条
+        stripe_height_mm = 15.0
+        stripe_width_mm = 30.0
+        stripe_y = y_mm + h_mm - bottom_margin_mm - stripe_height_mm
+        self._draw_diagonal_stripes_pdf(pdf, x_mm, stripe_y, w_mm, stripe_height_mm, stripe_width_mm)
+
+        bottom_area_top = y_mm + h_mm - bottom_margin_mm
+
+        # SKU 文字（居中，线描图下方）
+        sku_text = sku_config.sku_name
+        sku_pt, pil_sku = self._get_font_size(
+            sku_text, 'CentSchbook', w_mm * 0.9, ppi, h_mm * 0.12)
+        sl, st, sr, sb = self._pil_bbox_mm(pil_sku, sku_text, ppi)
+        sku_text_w = sr - sl
+        sku_text_h = sb - st
+        sku_text_y = stripe_y - sku_text_h - h_mm * 0.03
+        sku_text_x = x_mm + (w_mm - sku_text_w) / 2
+        self._draw_text_top_left(pdf, sku_text_x, sku_text_y,
+                                  sku_text, 'CentSchbook', '', sku_pt, pil_sku, ppi)
+
+        # 窄侧唛标签（右侧）
+        label_h_mm = w_mm * 0.15
+        label_w_mm = label_h_mm * 2076 / 1073
+        label_y = bottom_area_top + (bottom_margin_mm - label_h_mm) / 2
+        label_x = x_mm + w_mm / 2 + (w_mm / 2 - label_w_mm) / 2
+        pdf.image(self.resources['icon_side_label_narrow'],
+                  x=label_x, y=label_y, w=label_w_mm, h=label_h_mm)
+
+        self._draw_label_overlay(
+            pdf, sku_config,
+            label_x, label_y, label_w_mm, label_h_mm,
+            barcode1_text=sku_config.sku_name,
+            barcode2_text=sku_config.side_text['sn_code'],
+            bc1_xf=0.05,  bc1_yf=0.04, bc1_wf=0.533, bc1_hf=0.28,
+            bc2_xf=0.60,  bc2_yf=0.04, bc2_wf=0.36,  bc2_hf=0.28,
+            bar_yf=0.88,  bar_hf=0.12,
+            origin_y=0.2,
+        )
+
+        # 左侧信息区域（毛重净重、箱子尺寸）
+        info_x = x_mm + w_mm * 0.0987
+        info_center_y = bottom_area_top + bottom_margin_mm / 2
+        vertical_gap = 26.0
+
+        label_font_h_mm = h_mm * 0.028
+        label_font_px = int(label_font_h_mm * px_per_mm)
+        label_font_pt = label_font_px * 72.0 / ppi
+        pil_lbl = ImageFont.truetype(self.font_paths['CentSchbook'], label_font_px)
+
+        value_font_h_mm = h_mm * 0.024
+        value_font_px = int(value_font_h_mm * px_per_mm)
+        value_font_pt = value_font_px * 72.0 / ppi
+        pil_val = ImageFont.truetype(self.font_paths['CentSchbook'], value_font_px)
+
+        # G.W./N.W. 标签（黑框）
+        gw_label = "G.W./N.W."
+        gl, gt, gr, gb = self._pil_bbox_mm(pil_lbl, gw_label, ppi)
+        gw_lbl_w = gr - gl
+        gw_lbl_h = gb - gt
+        gw_lbl_y = info_center_y - vertical_gap / 2 - gw_lbl_h * 1.3
+
+        pad_x = 3.0
+        pad_y_top = 0.7 * 1.2 * 10
+        pad_y_bot = 0.7 * 1.2 * 10
+        radius_mm = 20 * 25.4 / ppi
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(info_x - pad_x, gw_lbl_y - pad_y_top,
+                 gw_lbl_w + 2 * pad_x, gw_lbl_h + pad_y_top + pad_y_bot,
+                 style='F', round_corners=True, corner_radius=radius_mm)
+        r, g, b = sku_config.background_color
+        self._draw_text_top_left(pdf, info_x, gw_lbl_y,
+                                  gw_label, 'CentSchbook', '', label_font_pt, pil_lbl, ppi,
+                                  color=(r, g, b))
+
+        # G.W./N.W. 值
+        gw_value = (f"{sku_config.side_text['gw_value']} / "
+                    f"{sku_config.side_text['nw_value']} LBS")
+        vl, vt, vr, vb = self._pil_bbox_mm(pil_val, gw_value, ppi)
+        val_h = vb - vt
+        gw_value_x = info_x + gw_lbl_w + 20.0
+        gw_val_center_y = gw_lbl_y + gw_lbl_h / 2
+        gw_val_y = gw_val_center_y - val_h / 2
+        self._draw_text_top_left(pdf, gw_value_x, gw_val_y,
+                                  gw_value, 'CentSchbook', '', value_font_pt, pil_val, ppi)
+
+        # BOX SIZE 标签（黑框）
+        box_label = "BOX SIZE"
+        bl2, bt2, br2, bb2 = self._pil_bbox_mm(pil_lbl, box_label, ppi)
+        box_lbl_w = br2 - bl2
+        box_lbl_h = bb2 - bt2
+        box_lbl_y = info_center_y + vertical_gap / 2
+        pdf.set_fill_color(0, 0, 0)
+        pdf.rect(info_x - pad_x, box_lbl_y - pad_y_top,
+                 box_lbl_w + 2 * pad_x, box_lbl_h + pad_y_top + pad_y_bot,
+                 style='F', round_corners=True, corner_radius=radius_mm)
+        self._draw_text_top_left(pdf, info_x, box_lbl_y,
+                                  box_label, 'CentSchbook', '', label_font_pt, pil_lbl, ppi,
+                                  color=(r, g, b))
+
+        # BOX SIZE 值
+        box_val_text = (f'{sku_config.l_in:.1f}" x '
+                        f'{sku_config.w_in:.1f}" x '
+                        f'{sku_config.h_in:.1f}"')
+        bvl, bvt, bvr, bvb = self._pil_bbox_mm(pil_val, box_val_text, ppi)
+        bval_h = bvb - bvt
+        box_val_center_y = box_lbl_y + box_lbl_h / 2
+        box_val_y = box_val_center_y - bval_h / 2
+        self._draw_text_top_left(pdf, gw_value_x, box_val_y,
+                                  box_val_text, 'CentSchbook', '', value_font_pt, pil_val, ppi)
+
+        # 虚线（两行文字中间）
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(0.3)
+        dash_x = x_mm + w_mm * 0.101
+        end_x = dash_x + w_mm * 0.44
+        cx = dash_x
+        while cx < end_x:
+            pdf.line(cx, info_center_y, min(cx + 2.5, end_x), info_center_y)
+            cx += 5.0
+
     # ── 翻盖面板 (vector) ────────────────────────────────────────────────────
 
     def _draw_flap_left_up(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm):
@@ -395,146 +731,189 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
             self._draw_flap_compact(pdf, sku_config, x_mm, y_mm, w_mm, h_mm, ppi, px_per_mm)
 
     def _draw_flap_tall(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm, ppi, px_per_mm):
-        """Tall flap layout (w_cm > 30): stacked vertically."""
-        # Attention icon (top, 95% width, centred)
-        att_path = self._get_resource_path('icon_attention_info')
-        att_w = w_mm * 0.95
-        with Image.open(att_path) as img:
-            a_ow, a_oh = img.size
-        att_h = att_w * a_oh / a_ow
-        att_margin_top = att_h * 0.50
-        att_x = x_mm + (w_mm - att_w) / 2
-        att_y = y_mm + att_margin_top
-        pdf.image(att_path, x=att_x, y=att_y, w=att_w, h=att_h)
-        att_bottom = att_y + att_h
+        """Tall flap layout (w_cm > 30): stacked vertically, driven by layout_engine."""
+        font_path = self.font_paths['CentSchbook']
+        bg_r, bg_g, bg_b = sku_config.background_color
+        radius_mm = 16 * 25.4 / ppi
 
-        # Logo (below attention, 16% height)
-        icon_logo = self._get_resource_path('icon_logo')
-        logo_h = h_mm * 0.16
-        with Image.open(icon_logo) as img:
-            l_ow, l_oh = img.size
-        logo_w = logo_h * l_ow / l_oh
-        logo_y = att_bottom + 30.0  # ~3cm gap
-        logo_x = x_mm + (w_mm - logo_w) / 2
-        pdf.image(icon_logo, x=logo_x, y=logo_y, w=logo_w, h=logo_h)
-        logo_bottom = logo_y + logo_h
+        att_path  = self._get_resource_path('icon_attention_info')
+        logo_path = self._get_resource_path('icon_logo')
 
-        # Pre-calculate bottom info area
-        margin_bottom = h_mm * 0.10
-        info_font_h_mm = w_mm * 0.030 / px_per_mm * px_per_mm  # keep proportional
-        bottom_info_h = margin_bottom + w_mm * 0.030 + 5.0
-
-        # SKU name
+        # ── 字体大小 ──
         sku_text = sku_config.sku_name
-        avail_for_sku = h_mm - (logo_bottom - y_mm) - bottom_info_h - 40.0
-        sku_pt, pil_sku = self._get_font_size(
-            sku_text, 'CentSchbook', w_mm * 0.90, avail_for_sku * 0.6, ppi=ppi)
-        sl, st, sr, sb = self._pil_bbox_mm(pil_sku, sku_text, ppi)
-        sku_w = sr - sl
-        sku_h_v = sb - st
-        sku_y = logo_bottom + (avail_for_sku - sku_h_v) * 0.52
-        sku_x = x_mm + (w_mm - sku_w) / 2
-        self._draw_text_top_left(pdf, sku_x, sku_y,
-                                  sku_text, 'CentSchbook', '', sku_pt, pil_sku, ppi)
+        sku_pt, _ = self._get_font_size(sku_text, 'CentSchbook', w_mm * 0.87, ppi)
 
-        # Dashed line below SKU
-        dash_y = sku_y + sku_h_v + h_mm * 0.10
-        dash_x_start = sku_x
-        dash_x_end = sku_x + sku_w
-        pdf.set_draw_color(0, 0, 0)
-        pdf.set_line_width(0.3)
-        cx = dash_x_start
-        while cx < dash_x_end:
-            pdf.line(cx, dash_y, min(cx + 2.0, dash_x_end), dash_y)
-            cx += 3.5
+        label_pt = int(w_mm * 0.030 * px_per_mm) * 72.0 / ppi
+        value_pt = int(w_mm * 0.025 * px_per_mm) * 72.0 / ppi
 
-        # Bottom info: G.W./N.W. and BOX SIZE with black-bg labels
-        self._draw_flap_bottom_info(pdf, sku_config,
-                                     x_mm, y_mm, w_mm, h_mm, ppi, px_per_mm,
-                                     left_x_frac=0.09, right_x_frac=0.54,
-                                     info_y=y_mm + h_mm - margin_bottom - w_mm * 0.030,
-                                     label_h_mm=w_mm * 0.030,
-                                     value_h_mm=w_mm * 0.025,
-                                     gap_after_label=18.0)
+        gw_value = (f"{sku_config.side_text['gw_value']} / "
+                    f"{sku_config.side_text['nw_value']} LBS")
+        dim_text = (f'{sku_config.l_in:.1f}" x '
+                    f'{sku_config.w_in:.1f}" x '
+                    f'{sku_config.h_in:.1f}"')
+
+        # ── 底部信息（G.W./N.W. 在 9% 处，BOX SIZE 在 54% 处）──
+        gw_group = engine.Row(
+            spacing=18.0, align='center',
+            children=[
+                engine.Text("G.W./N.W.", 'CentSchbook', label_pt,
+                            font_path=font_path, ppi=ppi,
+                            draw_background=True, background_color=(0, 0, 0),
+                            color=(bg_r, bg_g, bg_b),
+                            padding_x=5.0, padding_y=4.9, border_radius=radius_mm),
+                engine.Text(gw_value, 'CentSchbook', value_pt,
+                            font_path=font_path, ppi=ppi, nudge_y = 4.9),
+            ]
+        )
+        box_group = engine.Row(
+            spacing=18.0, align='center',
+            children=[
+                engine.Text("BOX SIZE", 'CentSchbook', label_pt,
+                            font_path=font_path, ppi=ppi,
+                            draw_background=True, background_color=(0, 0, 0),
+                            color=(bg_r, bg_g, bg_b),
+                            padding_x=5.0, padding_y=4.9, border_radius=radius_mm),
+                engine.Text(dim_text, 'CentSchbook', value_pt,
+                            font_path=font_path, ppi=ppi, nudge_y = 4.9),
+            ]
+        )
+        mid_spacer_w = max(0.0, w_mm * 0.45 - gw_group.width)
+        bottom_row = engine.Row(
+            fixed_width=w_mm, align='center',
+            children=[
+                engine.Spacer(width=w_mm * 0.09),
+                gw_group,
+                engine.Spacer(width=mid_spacer_w),
+                box_group,
+            ]
+        )
+        # ── SKU 文字 + 虚线（Text 在 __init__ 即可测量宽度）──
+        sku_elem = engine.Text(sku_text, 'CentSchbook', sku_pt,
+                               font_path=font_path, ppi=ppi)
+        sku_block = engine.Column(
+            align='center', spacing=h_mm * 0.05,
+            children=[
+                sku_elem,
+                engine.DashedLine(width=sku_elem.width, dash_len=2.0,
+                                  dash_gap=1.5, line_width=0.3),
+                bottom_row,
+            ]
+        )
+
+        # ── 主布局列：构造后用 height 居中 ──
+        main_col = engine.Column(
+            fixed_height=h_mm,
+            fixed_width=w_mm,
+            justify='center',
+            align='center',
+            spacing=h_mm * 0.08,
+            children=[
+                engine.Image(att_path,  width=w_mm * 0.95),
+                engine.Image(logo_path, height=h_mm * 0.16),
+                sku_block,
+            ]
+        )
+        
+        main_col.layout(x_mm, y_mm)
+        main_col.render(pdf)
 
     def _draw_flap_compact(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm, ppi, px_per_mm):
-        """Compact flap layout (w_cm ≤ 30): attention top, then left logo / right content."""
-       
-        # Attention icon
-        att_path = self._get_resource_path('icon_attention_info')
-        att_w = w_mm * 0.95
-        with Image.open(att_path) as img:
-            a_ow, a_oh = img.size
-        att_h = att_w * a_oh / a_ow
-        att_margin_top = att_h * 0.50
-        att_x = x_mm + (w_mm - att_w) / 2
-        att_y = y_mm + att_margin_top
-        pdf.image(att_path, x=att_x, y=att_y, w=att_w, h=att_h)
-        content_start_y = att_y + att_h + 15.0
+        """Tall flap layout (w_cm > 30): stacked vertically, driven by layout_engine."""
+        font_path = self.font_paths['CentSchbook']
+        bg_r, bg_g, bg_b = sku_config.background_color
+        radius_mm = 16 * 25.4 / ppi
 
-        left_ratio = 0.25
-        left_w = w_mm * left_ratio
-        right_w = w_mm * (1 - left_ratio)
-        right_x = x_mm + left_w
-        avail_h = (y_mm + h_mm) - content_start_y
+        att_path  = self._get_resource_path('icon_attention_info')
+        logo_path = self._get_resource_path('icon_logo')
 
-        # Logo (left, vertically centred)
-        icon_logo = self._get_resource_path('icon_logo')
-        logo_h = avail_h * 0.40
-        with Image.open(icon_logo) as img:
-            l_ow, l_oh = img.size
-        logo_w = logo_h * l_ow / l_oh
-        logo_x = x_mm + (left_w - logo_w) / 2
-        logo_y = content_start_y + (avail_h - logo_h) / 2
-        pdf.image(icon_logo, x=logo_x, y=logo_y, w=logo_w, h=logo_h)
-
-        # Right side: SKU
-        margin_bottom_r = h_mm * 0.10
-        info_label_h = w_mm * 0.022
-        bottom_info_h = margin_bottom_r + info_label_h + 3.0
-        avail_sku_h = (avail_h - bottom_info_h) * 0.45
-
+        # ── 字体大小 ──
         sku_text = sku_config.sku_name
-        sku_pt, pil_sku = self._get_font_size(
-            sku_text, 'CentSchbook', right_w * 0.90, avail_sku_h, ppi=ppi)
-        sl, st, sr, sb = self._pil_bbox_mm(pil_sku, sku_text, ppi)
-        sku_w = sr - sl
-        sku_h_v = sb - st
-        sku_y = content_start_y + avail_h * 0.10
-        sku_x = right_x + (right_w - sku_w) * 0.35
-        self._draw_text_top_left(pdf, sku_x, sku_y,
-                                  sku_text, 'CentSchbook', '', sku_pt, pil_sku, ppi)
+        sku_pt, _ = self._get_font_size(sku_text, 'CentSchbook', w_mm * 0.71, ppi)
 
-        # Dashed line
-        dash_y = sku_y + sku_h_v + h_mm * 0.12
-        pdf.set_draw_color(0, 0, 0)
-        pdf.set_line_width(0.3)
-        cx = sku_x
-        while cx < sku_x + sku_w:
-            pdf.line(cx, dash_y, min(cx + 2.0, sku_x + sku_w), dash_y)
-            cx += 3.5
+        label_pt = int(w_mm * 0.0255 * px_per_mm) * 72.0 / ppi
+        value_pt = int(w_mm * 0.0212 * px_per_mm) * 72.0 / ppi
 
-        # Bottom info
-        info_lbl_y = dash_y + h_mm * 0.07
-        value_h_mm = w_mm * 0.018
-        # 左侧框的x坐标
-        left_box_x = sku_x + right_w * 0.04
+        gw_value = (f"{sku_config.side_text['gw_value']} / "
+                    f"{sku_config.side_text['nw_value']} LBS")
+        dim_text = (f'{sku_config.l_in:.1f}" x '
+                    f'{sku_config.w_in:.1f}" x '
+                    f'{sku_config.h_in:.1f}"')
+
+        # ── 底部信息（G.W./N.W. 在 9% 处，BOX SIZE 在 54% 处）──
+        gw_group = engine.Row(
+            spacing=18.0, align='center',
+            children=[
+                engine.Text("G.W./N.W.", 'CentSchbook', label_pt,
+                            font_path=font_path, ppi=ppi,
+                            draw_background=True, background_color=(0, 0, 0),
+                            color=(bg_r, bg_g, bg_b),
+                            padding_x=5.0, padding_y=4.9, border_radius=radius_mm),
+                engine.Text(gw_value, 'CentSchbook', value_pt,
+                            font_path=font_path, ppi=ppi, nudge_y = 4.9),
+            ]
+        )
+        box_group = engine.Row(
+            spacing=18.0, align='center',
+            children=[
+                engine.Text("BOX SIZE", 'CentSchbook', label_pt,
+                            font_path=font_path, ppi=ppi,
+                            draw_background=True, background_color=(0, 0, 0),
+                            color=(bg_r, bg_g, bg_b),
+                            padding_x=5.0, padding_y=4.9, border_radius=radius_mm),
+                engine.Text(dim_text, 'CentSchbook', value_pt,
+                            font_path=font_path, ppi=ppi, nudge_y = 4.9),
+            ]
+        )
+        mid_spacer_w = max(0.0, w_mm * 0.35 - gw_group.width)
+        bottom_row = engine.Row(
+            fixed_width= gw_group.width + mid_spacer_w + box_group.width, 
+            align='center',
+            children=[
+                # engine.Spacer(width=w_mm * 0.09),
+                gw_group,
+                engine.Spacer(width=mid_spacer_w),
+                box_group,
+            ]
+        )
+        # ── SKU 文字 + 虚线（Text 在 __init__ 即可测量宽度）──
+        sku_elem = engine.Text(sku_text, 'CentSchbook', sku_pt,
+                               font_path=font_path, ppi=ppi)
+        sku_block = engine.Column(
+            align='center', spacing=h_mm * 0.05,
+            children=[
+                sku_elem,
+                engine.DashedLine(width=sku_elem.width, dash_len=2.0,
+                                  dash_gap=1.5, line_width=0.3),
+                bottom_row,
+            ]
+        )
+
+        # ── logo 和 sku 水平布局 ──
         
-        # 左框和右框的间隔
-        gap_label = 8.0
+        logo_sku_row = engine.Row(
+            align='center', 
+            spacing=w_mm * 0.05,
+            children=[
+                engine.Image(logo_path, height=h_mm * 0.16),
+                sku_block,
+            ]
+        )
         
-        # 右侧框的x坐标
-        right_box_x = right_x + right_w * 0.52
-
-        self._draw_flap_bottom_info(pdf, sku_config,
-                                     x_mm, y_mm, w_mm, h_mm, ppi, px_per_mm,
-                                     left_x_frac=None, right_x_frac=None,
-                                     info_y=info_lbl_y,
-                                     label_h_mm=info_label_h,
-                                     value_h_mm=value_h_mm,
-                                     gap_after_label=gap_label,
-                                     abs_left_x=left_box_x,
-                                     abs_right_x=right_box_x)
+        # ── 主布局列：构造后用 height 居中 ──
+        main_col = engine.Column(
+            fixed_height=h_mm,
+            fixed_width=w_mm,
+            justify='center',
+            align='center',
+            spacing=h_mm * 0.10,
+            children=[
+                engine.Image(att_path,  width=w_mm * 0.95),
+                logo_sku_row,
+            ]
+        )
+        
+        main_col.layout(x_mm, y_mm)
+        main_col.render(pdf)
 
     def _draw_flap_bottom_info(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
                                 ppi, px_per_mm,
@@ -620,7 +999,7 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
                                barcode1_text, barcode2_text,
                                bc1_xf, bc1_yf, bc1_wf, bc1_hf,
                                bc2_xf, bc2_yf, bc2_wf, bc2_hf,
-                               bar_yf, bar_hf):
+                               bar_yf, bar_hf, origin_y = 0.2):
         """Overlay barcodes and origin bar on a side label template."""
         ppi = sku_config.ppi
         px_per_mm = ppi / 25.4
