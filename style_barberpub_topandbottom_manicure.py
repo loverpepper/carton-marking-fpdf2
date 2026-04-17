@@ -502,7 +502,7 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
 
         # --- 区域 E: 左下角颜色 + SKU 代码 ---
         margin_bottom = 35.0  # 3.5 cm
-        text_v_gap = 3.0
+        text_v_gap = 11.0
 
         color_text = f"{sku_config.color.upper()}"
         color_size_px = int(h_mm * 0.06 * px_per_mm)

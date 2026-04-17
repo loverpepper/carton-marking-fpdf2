@@ -403,12 +403,12 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         ppi = sku_config.ppi
         px_per_mm = ppi / 25.4
 
-        if sku_config.w_cm > sku_config.h_cm and abs(sku_config.w_cm - sku_config.h_cm) > 10 and sku_config.h_cm > 30:
+        if sku_config.w_cm > 40 and sku_config.h_cm > 50:
             # 宽大约等于高，使用宽侧唛布局
             self._draw_side_wide(pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
                                  ppi, px_per_mm)
-        elif sku_config.h_cm <= 30:
-            # 高小于等于30cm，使用宽侧唛布局
+        elif sku_config.w_cm > 40 and sku_config.h_cm <= 50:
+            # 高小于等于50cm，使用宽侧唛布局
             self._draw_side_low(pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
                                  ppi, px_per_mm)
         else:
@@ -452,6 +452,8 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         #线描图起始位置：左侧边距 50mm，垂直居中，向下偏移 h_mm * 0.05
         line_x = x_mm + 26.0
         line_y = y_mm + (h_mm - line_h_mm) / 2 + h_mm * 0.05
+        # 重置填充色为黑色，防止 fpdf2 SVG 渲染器继承斜纹条的背景色填充
+        pdf.set_fill_color(0, 0, 0)
         pdf.image(self._prepare_image_for_fpdf(line_path), x=line_x, y=line_y, w=line_w_mm, h=line_h_mm)
 
         # SKU 文字（右区，CentSchbook）

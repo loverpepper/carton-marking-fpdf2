@@ -592,6 +592,8 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         line_w_mm = line_h_mm * l_orig_w / l_orig_h
         line_x = x_mm + (w_mm - line_w_mm) / 2
         line_y = webside_y + webside_h_mm + 30.0
+        # 重置填充色为黑色，防止 fpdf2 SVG 渲染器继承斜纹条的背景色填充
+        pdf.set_fill_color(0, 0, 0)
         pdf.image(self._prepare_image_for_fpdf(line_path), x=line_x, y=line_y,
                   w=line_w_mm, h=line_h_mm)
 
