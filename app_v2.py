@@ -538,20 +538,34 @@ with tab_single:
                 pdf_bytes_data = generator.generate_pdf_bytes(test_sku)
                 st.session_state.pdf_bytes = pdf_bytes_data
 
-                # 用 PyMuPDF 将 PDF 光栅化为预览图
-                canvas = generator.generate_complete_layout(test_sku)
+                # 用 PyMuPDF 将 PDF 直接极低内存安全压缩成小图
+                import fitz
+                doc = fitz.open(stream=pdf_bytes_data, filetype="pdf")
+                page = doc[0]
 
-                max_preview_width = 2000
-                if canvas.width > max_preview_width:
-                    preview_ratio = max_preview_width / canvas.width
-                    preview_size  = (max_preview_width, int(canvas.height * preview_ratio))
-                    preview_image = canvas.resize(preview_size, Image.Resampling.LANCZOS)
-                else:
-                    preview_image = canvas
+                # PDF的原始 pt 尺寸 (72 DPI)
+                pdf_w_pt = page.rect.width
+                pdf_h_pt = page.rect.height
+
+                # 计算用户请求原本会产生的真实大图尺寸 (按用户指定的 PPI)
+                true_w_px = int(pdf_w_pt * ppi / 72.0)
+                true_h_px = int(pdf_h_pt * ppi / 72.0)
+
+                # ⚠️ 内存安全保护机制：如果原始像素尺寸超过 2000，则渲染时直接使用缩小比例
+                # 这样可以彻底避免创建一张 3.5GB 甚至 10GB 的超级缓存光栅图导致 OOM 崩溃！
+                max_preview_w = 2000
+                render_zoom = ppi / 72.0
+                if true_w_px > max_preview_w:
+                    render_zoom = max_preview_w / pdf_w_pt
+                
+                mat = fitz.Matrix(render_zoom, render_zoom)
+                pix = page.get_pixmap(matrix=mat, alpha=False)  # 用 RGB 降低开销，避免巨大的 RGBA 通道
+                preview_image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                
+                doc.close()
 
                 st.session_state.generated_image = preview_image
-                total_width, total_height = canvas.size
-                st.session_state.last_gen_info = (style_descriptions[selected_style], total_width, total_height, ppi)
+                st.session_state.last_gen_info = (style_descriptions[selected_style], true_w_px, true_h_px, ppi)
                 logger.info(f"单张生成成功: SKU={sku_name}, 样式={selected_style}")
                 st.rerun()
 
