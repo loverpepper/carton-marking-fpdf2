@@ -10,9 +10,11 @@ import zipfile
 import traceback
 import logging
 import sys
+import os
 
 # 配置日志输出到 stdout，以便 Docker logs 能够捕获
 logging.basicConfig(
+
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[logging.StreamHandler(sys.stdout)]
@@ -35,6 +37,8 @@ import style_mcombo_standard
 import style_simple
 # 未来添加更多样式时在这里导入
 
+import stats_db
+
 # 设置页面配置
 st.set_page_config(
     page_title="箱唛生成器",
@@ -43,6 +47,9 @@ st.set_page_config(
 )
 
 logger.info("=== Web UI 初始化或刷新页面 ===")
+
+# 初始化数据库
+stats_db.init_db()
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 辅助函数
@@ -92,6 +99,7 @@ TEMPLATE_COLUMNS = [
 COL_KEYS = [c[0] for c in TEMPLATE_COLUMNS]
 
 
+@st.cache_data(show_spinner=False)
 def build_excel_template() -> bytes:
     """生成带样式的Excel模板，返回字节流"""
     wb = Workbook()
@@ -301,10 +309,24 @@ if 'last_gen_info' not in st.session_state:
 st.title("📦 Mcombo·Barberpub·Exacme·新市场 箱唛生成器 V4")
 st.caption("🎨 支持多样式切换 · 支持批量Excel生成")
 
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Tab 切换
 # ──────────────────────────────────────────────────────────────────────────────
-tab_single, tab_batch = st.tabs(["🖊️ 单个生成", "📊 批量生成（Excel）"])
+tab_single, tab_batch, tab_stats = st.tabs(["🖊️ 单个生成", "📊 批量生成（Excel）", "📈 数据看板🔒"])
+
+# 使用自定义 CSS 将第三个 Tab（数据看板）强制推到最右侧
+st.markdown("""
+<style>
+    div[data-baseweb="tab-list"] {
+        display: flex;
+        width: 100%;
+    }
+    div[data-baseweb="tab"]:nth-child(3) {
+        margin-left: auto !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Tab 1：单个生成（原有功能）
@@ -567,6 +589,11 @@ with tab_single:
                 st.session_state.generated_image = preview_image
                 st.session_state.last_gen_info = (style_descriptions[selected_style], true_w_px, true_h_px, ppi)
                 logger.info(f"单张生成成功: SKU={sku_name}, 样式={selected_style}")
+                
+                # 记录统计 (同时记录产品名称)
+                _prod_name = style_params.get('product', '')
+                stats_db.log_success(selected_style, current_sku, "单张(含预览)", _prod_name)
+
                 st.rerun()
 
             except Exception as e:
@@ -639,10 +666,15 @@ with tab_batch:
 
     if uploaded_file is not None:
         try:
+            # 引入缓存机制：避免Streamlit在每次键盘输入时都去读取解析巨大的Excel文件
+            @st.cache_data(show_spinner=False)
+            def load_and_parse_excel(file_bytes: bytes) -> pd.DataFrame:
+                df = pd.read_excel(io.BytesIO(file_bytes), header=0, skiprows=[1, 2, 3], dtype=str)
+                df.dropna(how="all", inplace=True)
+                return df
+
             # 读取 Excel：第1行为字段名(header)，跳过第2-4行（中文说明/示例/备注），第5行起为数据
-            df_raw = pd.read_excel(uploaded_file, header=0, skiprows=[1, 2, 3], dtype=str)
-            # 去掉全空行
-            df_raw.dropna(how="all", inplace=True)
+            df_raw = load_and_parse_excel(uploaded_file.getvalue()).copy()
 
             if df_raw.empty:
                 st.warning("⚠️ 上传的文件没有有效数据行（跳过了说明行后为空）。请从第5行起填写数据。")
@@ -727,6 +759,10 @@ with tab_batch:
                                 zf.writestr(f"{safe_name}.pdf", pdf_bytes_item)
                                 results.append((sku_label, True, "✅ 成功"))
                                 logger.info(f"批量任务成功 [{i+1}/{total}]: SKU={sku_label}")
+                                
+                                # 将该条成功记录写入统计库，归类为批量，并提取产品名称用于记录
+                                _prod_name = str(row_dict.get("product", "")).strip()
+                                stats_db.log_success(sku_cfg.style_name, sku_label, "批量ZIP", _prod_name)
 
                             except Exception as e:
                                 logger.error(f"批量生成失败 [{i+1}/{total}]: SKU={sku_label}, error: {str(e)}", exc_info=True)
@@ -775,6 +811,95 @@ with tab_batch:
         st.info("👆 请先上传 Excel 文件，或点击上方按钮下载模板。")
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Tab 3：数据看板 (需密码)
+# ──────────────────────────────────────────────────────────────────────────────
+with tab_stats:
+    st.header("📈 后台数据统计 (管理员)")
+    
+    # 从环境变量读取设定的密码，如果没有设定就使用默认密码 "admin2026"
+    import os
+    ADMIN_PWD = os.getenv("STATS_PASSWORD", "admin2026")
+    
+    if "admin_auth" not in st.session_state:
+        st.session_state.admin_auth = False
+
+    if not st.session_state.admin_auth:
+        st.info("🔒 为了数据隐私安全，请先输入管理员密码进行身份认证。")
+        col_pwd, col_btn = st.columns([3, 1])
+        with col_pwd:
+            pwd_input = st.text_input("请输入访问密码", type="password", key="stats_pwd_input")
+        with col_btn:
+            st.write("") # 占位
+            st.write("") # 向下对齐
+            if st.button("🔑 登录并查看"):
+                if pwd_input == ADMIN_PWD:
+                    st.session_state.admin_auth = True
+                    st.rerun()
+                else:
+                    st.error("❌ 密码错误！")
+    else:
+        col_s1, col_s2 = st.columns([4, 1])
+        with col_s1:
+            st.success("✅ 认证成功！欢迎进入管理员数据看板。")
+        with col_s2:
+            if st.button("🚪 退出登录"):
+                st.session_state.admin_auth = False
+                st.rerun()
+        
+        # 分为两个显示块，最近几天的统计 / 历史总排名
+        st.markdown("---")
+        st.subheader("🗓️ 每日生成统计 (柱状图)")
+        
+        df_daily = stats_db.get_daily_stats()
+        if not df_daily.empty:
+            df_daily['生成日期'] = pd.to_datetime(df_daily['生成日期']).dt.date
+            
+            # --- 筛选器 ---
+            f_col1, f_col2 = st.columns(2)
+            with f_col1:
+                min_date = df_daily['生成日期'].min()
+                max_date = df_daily['生成日期'].max()
+                sel_dates = st.date_input("📅 选择日期范围", value=(min_date, max_date), min_value=min_date, max_value=max_date)
+            
+            with f_col2:
+                all_styles = df_daily['选择样式'].unique().tolist()
+                sel_styles = st.multiselect("🎨 筛选目标样式", options=all_styles, default=all_styles)
+            
+            # --- 数据过滤 ---
+            mask = pd.Series(True, index=df_daily.index)
+            if len(sel_dates) == 2:
+                mask &= (df_daily['生成日期'] >= sel_dates[0]) & (df_daily['生成日期'] <= sel_dates[1])
+            elif len(sel_dates) == 1:
+                # 只有选择了一天的情况
+                mask &= (df_daily['生成日期'] == sel_dates[0])
+            
+            if sel_styles:
+                mask &= df_daily['选择样式'].isin(sel_styles)
+                
+            filtered_df = df_daily[mask]
+            
+            # --- 显示图表和表格 ---
+            if not filtered_df.empty:
+                # 透视表：横坐标为日期，纵坐标为件数，按选择样式分组（柱子）(改用 .size() 统计记录条数)
+                chart_data = filtered_df.groupby(['生成日期', '选择样式']).size().unstack(fill_value=0)
+                
+                st.bar_chart(chart_data)
+                
+                with st.expander("📝 查看数据明细表 (含具体SKU与名称)"):
+                    st.dataframe(filtered_df.sort_values(by=['生成日期', '时间'], ascending=[False, False]), use_container_width=True, hide_index=True)
+            else:
+                st.warning("⚠️ 该日期范围或筛选条件下目前没有记录。")
+        else:
+            st.info("目前还没有任何生成记录哦。")
+            
+        st.markdown("---")
+        st.subheader("🏆 全生命周期样式热度排行榜")
+        df_overall = stats_db.get_overall_stats()
+        if not df_overall.empty:
+            st.dataframe(df_overall, use_container_width=True, hide_index=True)
+        else:
+            st.info("目前还没有任何记录哦。")
 
 
 ########### 启动方式 ###########

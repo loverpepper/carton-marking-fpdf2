@@ -6,6 +6,11 @@ services:
     container_name: carton-marking-app
     ports:
       - "8501:8501"
+    environment:
+      - TZ=Asia/Shanghai  # 强制容器使用北京时间
+      - STATS_PASSWORD=175667  # 设置查看统计数据的访问密码
+    volumes:
+      - ./data:/app/data  # 将容器内的统计数据库持久化映射到宿主的当前 data 文件夹下
     restart: always # 遇到崩溃会自动重启！
     deploy:
       resources:
