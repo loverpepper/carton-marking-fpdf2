@@ -18,6 +18,9 @@ streamlit>=1.53.1
 pandas>=2.3.3
 openpyxl>=3.1.5
 
+# Cloudflare R2 / S3 兼容对象存储
+boto3>=1.35.0
+
 # 标准库包（Python内置，无需安装）
 # pathlib - Python 3.4+内置
 # abc - Python内置抽象基类
