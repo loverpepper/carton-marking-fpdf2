@@ -1240,6 +1240,11 @@ def get_max_font_size(text, font_path, target_width, max_height=None, min_size=1
     # 创建临时绘图对象用于测量
     temp_img = Image.new('RGB', (1, 1))
     draw = ImageDraw.Draw(temp_img)
+
+    if min_size is None:
+        min_size = 10
+    if max_size is None:
+        max_size = 1000
     
     # 二分查找最佳字号
     best_size = min_size

@@ -120,13 +120,13 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         """Return the resource file path (pathlib.Path)."""
         return self.resources[key]
 
-    def _get_font_size(self, text, font_key, target_width_mm, ppi, max_h_mm=None):
+    def _get_font_size(self, text, font_key, target_width_mm, ppi, max_h_mm=None, max_size=None):
         """Return (font_size_pt, pil_font) so text fits target_width_mm.
         Optionally constrain by max_h_mm."""
         path = self.font_paths[font_key]
         target_px = int(target_width_mm * ppi / 25.4)
         max_h_px = int(max_h_mm * ppi / 25.4) if max_h_mm is not None else None
-        size_px = general_functions.get_max_font_size(text, path, target_px, max_height=max_h_px)
+        size_px = general_functions.get_max_font_size(text, path, target_px, max_height=max_h_px, max_size=max_size)
         size_pt = size_px * 72.0 / ppi
         pil_font = ImageFont.truetype(path, size_px)
         return size_pt, pil_font
@@ -186,6 +186,32 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         pdf.set_text_color(r, g, b)
         pdf.set_font(font_family, font_style, font_size_pt)
         pdf.text(x_mm, baseline_y, text)
+
+    def _build_badge_text(self, text, font_family, font_size_pt, font_path, ppi,
+                          text_color, background_color, border_radius):
+        probe = engine.Text(
+            text,
+            font_family,
+            font_size_pt,
+            font_path=font_path,
+            ppi=ppi,
+        )
+        padding_x = max(2.8, min(8.5, probe.width * 0.06 + probe.height * 0.10))
+        padding_y = max(2.2, min(6.0, probe.height * 0.62))
+        return engine.Text(
+            text,
+            font_family,
+            font_size_pt,
+            font_path=font_path,
+            ppi=ppi,
+            draw_background=True,
+            background_color=background_color,
+            color=text_color,
+            padding_x=padding_x,
+            padding_y=padding_y,
+            border_radius=border_radius,
+            nudge_y = -padding_y
+        )
         
     def _draw_diagonal_stripes_pdf(
             self, pdf, x_mm, y_mm, w_mm, stripe_h_mm, stripe_w_mm=4.0, bg_color=(161, 142, 102)
@@ -743,7 +769,7 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
 
         # ── 字体大小 ──
         sku_text = sku_config.sku_name
-        sku_pt, _ = self._get_font_size(sku_text, 'CentSchbook', w_mm * 0.87, ppi)
+        sku_pt, _ = self._get_font_size(sku_text, 'CentSchbook', w_mm * 0.85, ppi = ppi, max_h_mm= h_mm * 0.20, max_size= 2000)
 
         label_pt = int(w_mm * 0.030 * px_per_mm) * 72.0 / ppi
         value_pt = int(w_mm * 0.025 * px_per_mm) * 72.0 / ppi
@@ -753,33 +779,38 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         dim_text = (f'{sku_config.l_in:.1f}" x '
                     f'{sku_config.w_in:.1f}" x '
                     f'{sku_config.h_in:.1f}"')
+        
+        # 生成一个文本框，量一下宽度，后续底部信息布局用
+        probe_left = engine.Text(gw_value, 'CentSchbook', value_pt,
+                            font_path=font_path, ppi=ppi)
+        
+        probe_right = engine.Text(dim_text, 'CentSchbook', value_pt,
+                            font_path=font_path, ppi=ppi)
 
         # ── 底部信息（G.W./N.W. 在 9% 处，BOX SIZE 在 54% 处）──
         gw_group = engine.Row(
-            spacing=18.0, align='center',
+            spacing= probe_right.width * 0.14, align='center',
             children=[
-                engine.Text("G.W./N.W.", 'CentSchbook', label_pt,
-                            font_path=font_path, ppi=ppi,
-                            draw_background=True, background_color=(0, 0, 0),
-                            color=(bg_r, bg_g, bg_b),
-                            padding_x=5.0, padding_y=4.9, border_radius=radius_mm),
+                self._build_badge_text(
+                    "G.W./N.W.", 'CentSchbook', label_pt, font_path, ppi,
+                    (bg_r, bg_g, bg_b), (0, 0, 0), radius_mm,
+                ),
                 engine.Text(gw_value, 'CentSchbook', value_pt,
-                            font_path=font_path, ppi=ppi, nudge_y = 4.9),
+                            font_path=font_path, ppi=ppi, nudge_y = 0),
             ]
         )
         box_group = engine.Row(
-            spacing=18.0, align='center',
+            spacing= probe_right.width * 0.14, align='center',
             children=[
-                engine.Text("BOX SIZE", 'CentSchbook', label_pt,
-                            font_path=font_path, ppi=ppi,
-                            draw_background=True, background_color=(0, 0, 0),
-                            color=(bg_r, bg_g, bg_b),
-                            padding_x=5.0, padding_y=4.9, border_radius=radius_mm),
+                self._build_badge_text(
+                    "BOX SIZE", 'CentSchbook', label_pt, font_path, ppi,
+                    (bg_r, bg_g, bg_b), (0, 0, 0), radius_mm,
+                ),
                 engine.Text(dim_text, 'CentSchbook', value_pt,
-                            font_path=font_path, ppi=ppi, nudge_y = 4.9),
+                            font_path=font_path, ppi=ppi, nudge_y = 0),
             ]
         )
-        mid_spacer_w = max(0.0, w_mm * 0.45 - gw_group.width)
+        mid_spacer_w = max(0.0, w_mm * 0.43 - gw_group.width)
         bottom_row = engine.Row(
             fixed_width=w_mm, align='center',
             children=[
@@ -810,7 +841,8 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
             align='center',
             spacing=h_mm * 0.08,
             children=[
-                engine.Image(att_path,  width=w_mm * 0.95),
+                # 顶部警示图标的宽度是整个面板的 85%，留一点边距更美观
+                engine.Image(att_path,  width=w_mm * 0.85),
                 engine.Image(logo_path, height=h_mm * 0.16),
                 sku_block,
             ]
@@ -845,11 +877,10 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         gw_group = engine.Row(
             spacing=18.0, align='center',
             children=[
-                engine.Text("G.W./N.W.", 'CentSchbook', label_pt,
-                            font_path=font_path, ppi=ppi,
-                            draw_background=True, background_color=(0, 0, 0),
-                            color=(bg_r, bg_g, bg_b),
-                            padding_x=5.0, padding_y=4.9, border_radius=radius_mm),
+                self._build_badge_text(
+                    "G.W./N.W.", 'CentSchbook', label_pt, font_path, ppi,
+                    (bg_r, bg_g, bg_b), (0, 0, 0), radius_mm,
+                ),
                 engine.Text(gw_value, 'CentSchbook', value_pt,
                             font_path=font_path, ppi=ppi, nudge_y = 4.9),
             ]
@@ -857,11 +888,10 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         box_group = engine.Row(
             spacing=18.0, align='center',
             children=[
-                engine.Text("BOX SIZE", 'CentSchbook', label_pt,
-                            font_path=font_path, ppi=ppi,
-                            draw_background=True, background_color=(0, 0, 0),
-                            color=(bg_r, bg_g, bg_b),
-                            padding_x=5.0, padding_y=4.9, border_radius=radius_mm),
+                self._build_badge_text(
+                    "BOX SIZE", 'CentSchbook', label_pt, font_path, ppi,
+                    (bg_r, bg_g, bg_b), (0, 0, 0), radius_mm,
+                ),
                 engine.Text(dim_text, 'CentSchbook', value_pt,
                             font_path=font_path, ppi=ppi, nudge_y = 4.9),
             ]

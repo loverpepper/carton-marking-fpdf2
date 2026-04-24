@@ -5,6 +5,7 @@ import logging
 import os
 import shutil
 import tempfile
+from datetime import datetime, timezone
 import streamlit as st
 
 logger = logging.getLogger("app")
@@ -17,7 +18,8 @@ R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "").strip()
 R2_ACCESS_KEY_ID = os.getenv("R2_ACCESS_KEY_ID", "").strip()
 R2_SECRET_ACCESS_KEY = os.getenv("R2_SECRET_ACCESS_KEY", "").strip()
 R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "").strip()
-R2_OBJECT_KEY = os.getenv("R2_OBJECT_KEY", "carton-marking/stats.db").strip()
+R2_OBJECT_PREFIX = os.getenv("R2_OBJECT_PREFIX", "carton-marking/backups").strip().strip("/")
+R2_LEGACY_OBJECT_KEY = os.getenv("R2_OBJECT_KEY", "carton-marking/stats.db").strip()
 
 
 def _r2_ready() -> bool:
@@ -27,7 +29,7 @@ def _r2_ready() -> bool:
         R2_ACCESS_KEY_ID,
         R2_SECRET_ACCESS_KEY,
         R2_BUCKET_NAME,
-        R2_OBJECT_KEY,
+        R2_OBJECT_PREFIX,
     ])
 
 
@@ -44,21 +46,62 @@ def _get_r2_client():
     )
 
 
+def _get_local_row_count() -> int:
+    if not DB_PATH.exists():
+        return 0
+
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute("CREATE TABLE IF NOT EXISTS generation_logs (id INTEGER PRIMARY KEY AUTOINCREMENT)")
+            cursor = conn.execute("SELECT COUNT(*) FROM generation_logs")
+            result = cursor.fetchone()
+            return int(result[0]) if result else 0
+    except Exception:
+        return 0
+
+
+def _list_r2_backup_objects(client):
+    objects = []
+    prefix = f"{R2_OBJECT_PREFIX}/"
+    paginator = client.get_paginator("list_objects_v2")
+
+    for page in paginator.paginate(Bucket=R2_BUCKET_NAME, Prefix=prefix):
+        for obj in page.get("Contents", []):
+            key = obj.get("Key", "")
+            if key.endswith(".db"):
+                objects.append(obj)
+
+    return objects
+
+
 def restore_db_from_r2_if_needed():
-    """仅当本地库不存在时，尝试从 Cloudflare R2 恢复一份最新快照。"""
+    """仅当本地库不存在时，从 Cloudflare R2 恢复最新的增量快照。"""
     if DB_PATH.exists() or not _r2_ready():
         return
 
     try:
         DB_DIR.mkdir(parents=True, exist_ok=True)
         client = _get_r2_client()
+        backup_objects = _list_r2_backup_objects(client)
+        restore_key = None
+
+        if backup_objects:
+            latest_backup = max(backup_objects, key=lambda obj: obj["LastModified"])
+            restore_key = latest_backup["Key"]
+        elif R2_LEGACY_OBJECT_KEY:
+            restore_key = R2_LEGACY_OBJECT_KEY
+
+        if not restore_key:
+            logger.info("Cloudflare R2 中未找到统计数据库快照，将使用本地新库初始化")
+            return
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as tmp_file:
             temp_path = Path(tmp_file.name)
 
         try:
-            client.download_file(R2_BUCKET_NAME, R2_OBJECT_KEY, str(temp_path))
+            client.download_file(R2_BUCKET_NAME, restore_key, str(temp_path))
             shutil.move(str(temp_path), str(DB_PATH))
-            logger.info("已从 Cloudflare R2 恢复统计数据库快照")
+            logger.info(f"已从 Cloudflare R2 恢复统计数据库快照: {restore_key}")
         finally:
             if temp_path.exists():
                 temp_path.unlink()
@@ -67,8 +110,13 @@ def restore_db_from_r2_if_needed():
 
 
 def sync_db_to_r2():
-    """将本地 SQLite 快照同步到 Cloudflare R2，失败时不影响主流程。"""
+    """将本地 SQLite 作为追加快照同步到 Cloudflare R2，避免覆盖历史备份。"""
     if not DB_PATH.exists() or not _r2_ready():
+        return
+
+    row_count = _get_local_row_count()
+    if row_count <= 0:
+        logger.info("本地统计数据库为空，跳过 Cloudflare R2 同步，避免空库覆盖历史快照")
         return
 
     snapshot_path = None
@@ -78,8 +126,15 @@ def sync_db_to_r2():
 
         shutil.copy2(DB_PATH, snapshot_path)
         client = _get_r2_client()
-        client.upload_file(str(snapshot_path), R2_BUCKET_NAME, R2_OBJECT_KEY)
-        logger.info("统计数据库已同步到 Cloudflare R2")
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        snapshot_key = f"{R2_OBJECT_PREFIX}/stats_{timestamp}_{row_count}.db"
+        client.upload_file(
+            str(snapshot_path),
+            R2_BUCKET_NAME,
+            snapshot_key,
+            ExtraArgs={"Metadata": {"row-count": str(row_count), "source": "carton-marking-fpdf2"}},
+        )
+        logger.info(f"统计数据库增量快照已同步到 Cloudflare R2: {snapshot_key}")
     except Exception as e:
         logger.warning(f"同步统计数据库到 Cloudflare R2 失败，本地数据库仍可继续使用: {e}")
     finally:
@@ -108,8 +163,6 @@ def init_db():
             except sqlite3.OperationalError:
                 pass
             conn.commit()
-
-        sync_db_to_r2()
     except Exception as e:
         logger.error(f"初始化统计数据库失败: {e}", exc_info=True)
 
