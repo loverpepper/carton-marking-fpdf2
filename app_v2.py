@@ -19,6 +19,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger("app")
 
+# 屏蔽 fontTools 造成刷屏和 OOM （fpdf2 子集化字体时会狂刷 INFO 日志导致可能的卡死或假崩溃）
+logging.getLogger("fontTools.subset").setLevel(logging.WARNING)
+
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
