@@ -698,7 +698,7 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
             
     def _draw_side_low(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
                           ppi, px_per_mm):
-        """窄侧唛布局（w_cm <= h_cm）"""
+        """矮侧唛布局（w_cm <= h_cm）"""
 
         # 网址图标
         webside_path = self.resources['icon_webside']
@@ -738,9 +738,12 @@ class BarberpubDoubleOpeningStyle(BoxMarkStyle):
         self._draw_text_top_left(pdf, sku_text_x, sku_text_y,
                                   sku_text, 'CentSchbook', '', sku_pt, pil_sku, ppi)
 
-        # 窄侧唛标签（右侧）
-        label_h_mm = w_mm * 0.15
-        label_w_mm = label_h_mm * 2076 / 1073
+        # -----  矮侧唛标签（右侧）  -----
+        
+        # 侧唛标签高度是侧唛宽度的 12%，宽度根据标签模板的宽高比计算得出
+        label_h_mm = w_mm * 0.11
+        # 侧唛标签宽度
+        label_w_mm = label_h_mm * 1.9347
         label_y = bottom_area_top + (bottom_margin_mm - label_h_mm) / 2
         label_x = x_mm + w_mm / 2 + (w_mm / 2 - label_w_mm) / 2
         pdf.image(self.resources['icon_side_label_narrow'],
