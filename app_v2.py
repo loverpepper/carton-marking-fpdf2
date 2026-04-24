@@ -8,6 +8,16 @@ from pathlib import Path
 import io
 import zipfile
 import traceback
+import logging
+import sys
+
+# 配置日志输出到 stdout，以便 Docker logs 能够捕获
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("app")
 
 import pandas as pd
 from openpyxl import Workbook
@@ -27,9 +37,9 @@ st.set_page_config(
     page_title="箱唛生成器",
     page_icon="📦",
     layout="wide"
-
-
 )
+
+logger.info("=== Web UI 初始化或刷新页面 ===")
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 辅助函数
@@ -44,7 +54,7 @@ TEMPLATE_COLUMNS = [
     ("height_cm",       "高度(cm)",     47.0,                     "必填"),
     ("ppi",             "分辨率(PPI)",  150,                      "选填。默认150"),
     ("color",           "颜色",         "Beige",                  "选填"),
-    ("product",         "产品名称(多行用\\n分隔)",     "Lift Recliner",          "选填"),
+    ("product",         "产品名称(多行用\\n分隔)",     "Lift Recliner",          "必填"),
     ("product_fullname","产品全名(多行用\\n分隔)", "",             "选填"),
     ("size",            "尺寸标注",     "(Oversize)",             "选填"),
     ("gw_value",        "毛重(lbs)",    106.9,                    "选填"),
@@ -54,8 +64,8 @@ TEMPLATE_COLUMNS = [
     ("dim_h_in",        "箱高(英寸)",   18.5,                     "选填"),
     ("sn_code",         "SN条形码",     "08429381073953",         "选填"),
     ("origin_text",     "原产地文字",   "MADE IN CHINA",          "选填。默认MADE IN CHINA"),
-    ("total_boxes",     "总箱数",       3,                        "选填"),
-    ("current_box",     "当前箱号",     1,                        "选填"),
+    ("total_boxes",     "总箱数",       3,                        "必填"),
+    ("current_box",     "当前箱号",     1,                        "必填"),
     ("sponge_verified",           "海绵认证",              "否",                                              "选填。填 是 或 否"),
     ("country",                   "国家/地区",             "GE",                                              "选填。新市场样式用，可选: UK / FR / GE，留空忽略"),
     ("company_name",              "公司名称",              "NEWACME LLC",                                     "选填。新市场样式用"),
@@ -539,9 +549,11 @@ with tab_single:
                 st.session_state.generated_image = preview_image
                 total_width, total_height = canvas.size
                 st.session_state.last_gen_info = (style_descriptions[selected_style], total_width, total_height, ppi)
+                logger.info(f"单张生成成功: SKU={sku_name}, 样式={selected_style}")
                 st.rerun()
 
             except Exception as e:
+                logger.error(f"单张生成出错: SKU={sku_name}, error: {str(e)}", exc_info=True)
                 st.error(f"❌ 生成失败: {str(e)}")
                 st.code(traceback.format_exc())
 
@@ -610,21 +622,10 @@ with tab_batch:
 
     if uploaded_file is not None:
         try:
-            # 读取 Excel：跳过第2、3、4行（中文说明/示例/备注），第0行(index)作为列名
-            df_raw = pd.read_excel(uploaded_file, header=0, dtype=str)
+            # 读取 Excel：第1行为字段名(header)，跳过第2-4行（中文说明/示例/备注），第5行起为数据
+            df_raw = pd.read_excel(uploaded_file, header=0, skiprows=[1, 2, 3], dtype=str)
             # 去掉全空行
             df_raw.dropna(how="all", inplace=True)
-            # 去掉第2-4行（中文说明、示例、备注）— 它们是模板的固定头部需跳过
-            # 判断：如果第一列内容是中文说明/示例/备注之一，则跳过
-            def _is_header_meta_row(val):
-                skip_keywords = ["中文说明", "选填", "必填", "SKU名称", "样式名称",
-                                  "Lift Recliner", "CA-6160", "Beige", "mcombo_standard"]
-                if pd.isna(val):
-                    return False
-                sv = str(val).strip()
-                return any(kw in sv for kw in skip_keywords)
-
-            df_raw = df_raw[~df_raw.iloc[:, 0].apply(_is_header_meta_row)].reset_index(drop=True)
 
             if df_raw.empty:
                 st.warning("⚠️ 上传的文件没有有效数据行（跳过了说明行后为空）。请从第5行起填写数据。")
@@ -673,6 +674,7 @@ with tab_batch:
 
                 # ── 执行批量生成 ──
                 if do_batch:
+                    logger.info(f"开始批量生成任务，共 {len(df_raw)} 条数据进入队列。")
                     base_dir = Path(__file__).parent
                     zip_buffer = io.BytesIO()
                     results = []
@@ -707,8 +709,10 @@ with tab_batch:
                                 ).strip()
                                 zf.writestr(f"{safe_name}.pdf", pdf_bytes_item)
                                 results.append((sku_label, True, "✅ 成功"))
+                                logger.info(f"批量任务成功 [{i+1}/{total}]: SKU={sku_label}")
 
                             except Exception as e:
+                                logger.error(f"批量生成失败 [{i+1}/{total}]: SKU={sku_label}, error: {str(e)}", exc_info=True)
                                 results.append((sku_label, False, f"❌ 失败：{str(e)}"))
 
                             progress_bar.progress((i + 1) / total,
@@ -747,6 +751,7 @@ with tab_batch:
                     st.dataframe(pd.DataFrame(result_data), width='stretch')
 
         except Exception as e:
+            logger.error(f"读取或解析 Excel 文件出错: {str(e)}", exc_info=True)
             st.error(f"❌ 读取 Excel 出错：{str(e)}")
             st.code(traceback.format_exc())
     else:
