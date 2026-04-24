@@ -2,6 +2,8 @@ import sqlite3
 import pandas as pd
 from pathlib import Path
 import logging
+import os
+import streamlit as st
 
 logger = logging.getLogger("app")
 
@@ -12,6 +14,7 @@ DB_PATH = DB_DIR / "stats.db"
 def init_db():
     try:
         DB_DIR.mkdir(parents=True, exist_ok=True)
+        
         with sqlite3.connect(DB_PATH) as conn:
             # 记录每一次成功生成的流水账
             conn.execute('''
@@ -43,6 +46,7 @@ def log_success(style_name: str, sku_name: str, gen_type: str = "单张", produc
                 VALUES (?, ?, ?, ?)
             ''', (style_name, sku_name, gen_type, product_name))
             conn.commit()
+            
     except Exception as e:
         logger.error(f"写入统计数据失败: {e}")
     finally:

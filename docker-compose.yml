@@ -8,9 +8,11 @@ services:
       - "8501:8501"
     environment:
       - TZ=Asia/Shanghai  # 强制容器使用北京时间
-      - STATS_PASSWORD=175667  # 设置查看统计数据的访问密码
+      - STATS_PASSWORD=${STATS_PASSWORD:-admin2026}  # 设置查看统计数据的访问密码，从宿主机环境变量读取
+    env_file:
+      - .env  # 生产环境专属配置，该文件请永远不要提交到 Git
     volumes:
-      - ./data:/app/data  # 将容器内的统计数据库持久化映射到宿主的当前 data 文件夹下
+      - stats_data:/app/data  # 改用 Docker 命名卷，完全脱离 Git 目录，更新代码/重启绝不会覆盖数据
     restart: always # 遇到崩溃会自动重启！
     deploy:
       resources:
@@ -18,3 +20,7 @@ services:
           memory: 6G
         reservations:
           memory: 1G
+
+volumes:
+  stats_data:
+    name: carton_stats_data
