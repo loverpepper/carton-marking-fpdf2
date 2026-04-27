@@ -81,7 +81,6 @@ TEMPLATE_COLUMNS = [
     ("company_name",              "公司名称",              "NEWACME LLC",                                     "选填。新市场样式用"),
     ("contact_info",              "联系方式",              "www.mcombo.com / sale_uk@newacmellc.com",         "选填。新市场样式用"),
     ("show_fsc",                  "显示FSC标志",           "否",                                              "选填。填 是 或 否"),
-    ("show_sponge",               "显示海绵认证标志",      "否",                                              "选填。填 是 或 否"),
     ("legal_3_2",                 "法律条款3_2",           0,                                                 "选填。0或1"),
     ("legal_3_3",                 "法律条款3_3",           0,                                                 "选填。0或1"),
     ("legal_3_4",                 "法律条款3_4",           0,                                                 "选填。0或1"),
@@ -97,6 +96,27 @@ TEMPLATE_COLUMNS = [
 ]
 
 COL_KEYS = [c[0] for c in TEMPLATE_COLUMNS]
+
+
+@st.cache_data(show_spinner=False)
+def get_available_styles_cached() -> list:
+    """Return style metadata without repeating registry work on every rerun."""
+    return BoxMarkGenerator.list_available_styles()
+
+
+def get_boxmark_generator(style_name: str, ppi: int) -> BoxMarkGenerator:
+    """Reuse loaded style resources within the current Streamlit session."""
+    cache_key = (style_name, int(ppi))
+    if "_boxmark_generator_cache" not in st.session_state:
+        st.session_state._boxmark_generator_cache = {}
+    cache = st.session_state._boxmark_generator_cache
+    if cache_key not in cache:
+        cache[cache_key] = BoxMarkGenerator(
+            base_dir=Path(__file__).parent,
+            style_name=style_name,
+            ppi=int(ppi),
+        )
+    return cache[cache_key]
 
 
 @st.cache_data(show_spinner=False)
@@ -156,7 +176,7 @@ def build_excel_template() -> bytes:
     # 样式说明 sheet
     ws2 = wb.create_sheet("样式说明")
     ws2.append(["样式名称(style_name)", "说明"])
-    available_styles = BoxMarkGenerator.list_available_styles()
+    available_styles = get_available_styles_cached()
     for s in available_styles:
         ws2.append([s['name'], s['description']])
     ws2.column_dimensions["A"].width = 35
@@ -242,8 +262,6 @@ def row_to_skuconfig(row: dict, base_dir) -> SKUConfig:
     contact_info = str(get("contact_info", "www.mcombo.com / sale_uk@newacmellc.com")).strip()
 
     show_fsc    = str(get("show_fsc",    "否")).strip() in ("是", "True", "true", "1", "yes", "Yes")
-    show_sponge = str(get("show_sponge", "否")).strip() in ("是", "True", "true", "1", "yes", "Yes")
-
     legal_3_2 = int(float(get("legal_3_2", 0) or 0))
     legal_3_3 = int(float(get("legal_3_3", 0) or 0))
     legal_3_4 = int(float(get("legal_3_4", 0) or 0))
@@ -286,7 +304,6 @@ def row_to_skuconfig(row: dict, base_dir) -> SKUConfig:
         legal_3_5=legal_3_5,
         legal_3_6=legal_3_6,
         show_fsc=show_fsc,
-        show_sponge=show_sponge,
         country=country if country else None,
         **style_params
     )
@@ -334,7 +351,7 @@ st.markdown("""
 with tab_single:
 
     # 获取所有可用样式
-    available_styles = BoxMarkGenerator.list_available_styles()
+    available_styles = get_available_styles_cached()
     style_names = [s['name'] for s in available_styles]
     style_descriptions = {s['name']: s['description'] for s in available_styles}
 
@@ -549,12 +566,10 @@ with tab_single:
                     legal_3_5=nm_legal_3_5,
                     legal_3_6=nm_legal_3_6,
                     show_fsc=nm_show_fsc,
-                    show_sponge=sponge_verified,
                     country=nm_country if nm_country else None,
                     **style_params
                 )
-                base_dir = Path(__file__).parent
-                generator = BoxMarkGenerator(base_dir=base_dir, style_name=selected_style, ppi=ppi)
+                generator = get_boxmark_generator(selected_style, ppi)
 
                 # 生成 PDF 字节（fpdf2 直接输出，矢量清晰）
                 pdf_bytes_data = generator.generate_pdf_bytes(test_sku)
@@ -594,8 +609,6 @@ with tab_single:
                 _prod_name = style_params.get('product', '')
                 stats_db.log_success(selected_style, current_sku, "单张(含预览)", _prod_name)
 
-                st.rerun()
-
             except Exception as e:
                 logger.error(f"单张生成出错: SKU={sku_name}, error: {str(e)}", exc_info=True)
                 st.error(f"❌ 生成失败: {str(e)}")
@@ -615,7 +628,7 @@ with tab_single:
 
     # 底部说明
     st.markdown("---")
-    available_styles_list = BoxMarkGenerator.list_available_styles()
+    available_styles_list = get_available_styles_cached()
     st.markdown("### 🎨 当前可用样式")
     for style_info in available_styles_list:
         st.markdown(f"- **{style_info['name']}**: {style_info['description']}")
@@ -623,8 +636,7 @@ with tab_single:
             st.markdown(f"  - 必需参数: `{', '.join(style_info['required_params'])}`")
     st.markdown("""
 ### 🌐 局域网访问
-太原：连接公司WIFI【tomorrow】后访问: `http://192.168.1.54:8501`
-宁波：连接公司WIFI后访问: `http://【郭昕电脑的IP】:8501
+哪里都能访问了，快分享给需要的同事吧！如果有任何问题或建议，欢迎随时联系数据组。我们会持续优化功能和用户体验！🚀
 """)
 
 
@@ -681,7 +693,7 @@ with tab_batch:
             else:
                 st.subheader(f"📋 读取到 {len(df_raw)} 条 SKU 数据（可直接在表格内编辑）")
 
-                _style_options = [s['name'] for s in BoxMarkGenerator.list_available_styles()]
+                _style_options = [s['name'] for s in get_available_styles_cached()]
                 display_cols = [c for c in COL_KEYS if c in df_raw.columns]
                 edit_df = df_raw[display_cols].copy() if display_cols else df_raw.copy()
 
@@ -744,11 +756,7 @@ with tab_batch:
 
                             try:
                                 sku_cfg  = row_to_skuconfig(row_dict, base_dir)
-                                gen      = BoxMarkGenerator(
-                                    base_dir=base_dir,
-                                    style_name=sku_cfg.style_name,
-                                    ppi=sku_cfg.ppi
-                                )
+                                gen = get_boxmark_generator(sku_cfg.style_name, sku_cfg.ppi)
                                 pdf_bytes_item = gen.generate_pdf_bytes(sku_cfg)
 
                                 # 文件名去除非法字符

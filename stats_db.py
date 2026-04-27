@@ -182,7 +182,11 @@ def log_success(style_name: str, sku_name: str, gen_type: str = "单张", produc
         logger.error(f"写入统计数据失败: {e}")
     finally:
         # 写入新数据后清理缓存，让页面能读取到最新统计
-        st.cache_data.clear()
+        try:
+            get_daily_stats.clear()
+            get_overall_stats.clear()
+        except NameError:
+            pass
 
 @st.cache_data(ttl=60)
 def get_daily_stats() -> pd.DataFrame:

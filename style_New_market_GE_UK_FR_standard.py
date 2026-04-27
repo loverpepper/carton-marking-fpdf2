@@ -477,7 +477,7 @@ class MComboStandardStyle(BoxMarkStyle):
         table_h_px = int(8 * dpi)  # 固定高度 8cm
         gap_img = Image.new('RGBA', (int(0.3 * dpi), table_h_px), (0, 0, 0, 0))
 
-        # A. 海绵认证标 (根据开关 show_sponge 判断)
+        # A. 海绵认证标 (根据开关 sponge_verified 判断)
         if getattr(sku_config, 'sponge_verified', False) == True:
             img_s_res = general_functions.scale_by_height(self.resources['icon_side_sponge'].copy(), table_h_px)
             side_images.append(img_s_res)

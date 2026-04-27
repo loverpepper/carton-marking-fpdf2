@@ -82,12 +82,33 @@ class StyleRegistry:
     """样式注册表 - 管理所有可用的样式"""
 
     _styles = {}
+    _style_info = {}
+
+    @classmethod
+    def _read_style_info(cls, style_class):
+        """
+        Read lightweight metadata without running BoxMarkStyle.__init__().
+        Initializing a style loads image/font resources, which is expensive in
+        Streamlit because the page reruns on every widget interaction.
+        """
+        temp = style_class.__new__(style_class)
+        temp.base_dir = pathlib.Path(__file__).parent
+        temp.ppi = 72
+        temp.dpi = 72 / 2.54
+        temp.resources = {}
+        temp.font_paths = {}
+        return {
+            'name': temp.get_style_name(),
+            'description': temp.get_style_description(),
+            'required_params': temp.get_required_params(),
+        }
 
     @classmethod
     def register(cls, style_class):
         """注册样式类（用作装饰器 @StyleRegistry.register）"""
-        temp = style_class(base_dir=pathlib.Path(__file__).parent, ppi=72)
-        cls._styles[temp.get_style_name()] = style_class
+        info = cls._read_style_info(style_class)
+        cls._styles[info['name']] = style_class
+        cls._style_info[info['name']] = info
         return style_class
 
     @classmethod
@@ -102,12 +123,4 @@ class StyleRegistry:
     @classmethod
     def get_all_styles(cls) -> list:
         """获取所有已注册样式的信息列表"""
-        result = []
-        for name, klass in cls._styles.items():
-            temp = klass(base_dir=pathlib.Path(__file__).parent, ppi=72)
-            result.append({
-                'name': name,
-                'description': temp.get_style_description(),
-                'required_params': temp.get_required_params(),
-            })
-        return result
+        return [dict(cls._style_info[name]) for name in cls._styles]
