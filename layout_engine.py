@@ -5,6 +5,8 @@
 """
 
 import pathlib
+import re
+import xml.etree.ElementTree as ET
 from abc import ABC, abstractmethod
 
 from fpdf import FPDF
@@ -172,6 +174,27 @@ class Text(Element):
 
 
 class Image(Element):
+    @staticmethod
+    def _svg_size(path):
+        root = ET.parse(path).getroot()
+        view_box = root.get("viewBox")
+        if view_box:
+            parts = [float(p) for p in re.split(r"[\s,]+", view_box.strip()) if p]
+            if len(parts) == 4 and parts[2] > 0 and parts[3] > 0:
+                return parts[2], parts[3]
+
+        def parse_length(value):
+            if not value:
+                return None
+            match = re.match(r"^\s*([0-9.]+)", value)
+            return float(match.group(1)) if match else None
+
+        orig_w = parse_length(root.get("width"))
+        orig_h = parse_length(root.get("height"))
+        if orig_w and orig_h:
+            return orig_w, orig_h
+        raise ValueError(f"Cannot determine SVG size: {path}")
+
     def __init__(self, image, width=None, height=None, ppi=300, **kwargs):
         """
         image: PIL Image、str 路径或 pathlib.Path。
@@ -180,8 +203,12 @@ class Image(Element):
         """
         if isinstance(image, (str, pathlib.Path)):
             # 仅读取文件头获取尺寸，不加载像素数据
-            with PILImage.open(image) as _img:
-                orig_w, orig_h = _img.size
+            image_path = pathlib.Path(image)
+            if image_path.suffix.lower() == ".svg":
+                orig_w, orig_h = self._svg_size(image_path)
+            else:
+                with PILImage.open(image) as _img:
+                    orig_w, orig_h = _img.size
         else:
             orig_w, orig_h = image.width, image.height
 
@@ -238,6 +265,8 @@ class Column(Element):
             raise ValueError(
                 f"❌ Column 使用 justify='{justify}' 时必须指定 fixed_height"
             )
+        if justify == "center" and (fixed_height is None or fixed_width is None):
+            raise ValueError("❌ Column 使用 justify='center' 时必须指定 fixed_height 和 fixed_width")
 
         super().__init__(
             width=width,

@@ -17,6 +17,9 @@ import style_exacme_fulloverlap
 import style_exacme_doubleopening
 import style_exacme_topandbottom_squaretrampoline
 import style_exacme_topandbottom_doubleringandburiedtrampoline
+import style_CA_mcombo_standard
+import style_CA_mcombo_vertical
+import style_AU_mcombo_standard
 import style_New_market_GE_UK_FR_vertical
 import style_New_market_GE_UK_FR_standard
 import style_macrout_topandbottom   

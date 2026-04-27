@@ -1339,8 +1339,8 @@ def draw_dynamic_company_brand(sku_config, company_name, contact_info, font_path
     h_target_px = int(1.6 * dpi)
 
     # 1. 准备字体
-    font_left = ImageFont.truetype(font_paths['calibri_bold'], size=int(h_target_px * 0.65))
-    font_right = ImageFont.truetype(font_paths['calibri_bold'], size=int(h_target_px * 0.75))
+    font_left = ImageFont.truetype(font_paths['Calibri-Bold'], size=int(h_target_px * 0.65))
+    font_right = ImageFont.truetype(font_paths['Calibri-Bold'], size=int(h_target_px * 0.75))
 
     # 2. 测量文字
     temp_draw = ImageDraw.Draw(Image.new('RGBA', (1, 1)))
