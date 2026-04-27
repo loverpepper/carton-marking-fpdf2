@@ -19,7 +19,7 @@ class MComboVerticalStyle(BoxMarkStyle):
         return "CA-mcombo_vertical"
 
     def get_style_description(self):
-        return "加拿大 MCombo 第二箱三箱 箱唛"
+        return "加拿大 MCombo 转口第二箱三箱 箱唛"
 
     def get_required_params(self):
         return ['length_cm', 'width_cm', 'height_cm', 'color', 'product',
@@ -103,9 +103,9 @@ class MComboVerticalStyle(BoxMarkStyle):
             # 翻盖图标需要 PIL 旋转，保留为 PIL Image
             'icon_left_2_panel':    Image.open(res_base / '顶部-左-2箱.png').convert('RGBA'),
             'icon_left_3_panel':    Image.open(res_base / '顶部-左-3箱.png').convert('RGBA'),
-            'icon_right_2-1_panel': Image.open(res_base / '顶部-右-2-1.png').convert('RGBA'),
+            'icon_right_2-1_panel': Image.open(res_base / '顶部-右-2-1-32KG.png').convert('RGBA'),
             'icon_right_2-2_panel': Image.open(res_base / '顶部-右-2-2.png').convert('RGBA'),
-            'icon_right_3-1_panel': Image.open(res_base / '顶部-右-3-1.png').convert('RGBA'),
+            'icon_right_3-1_panel': Image.open(res_base / '顶部-右-3-1-32KG.png').convert('RGBA'),
             'icon_right_3-2_panel': Image.open(res_base / '顶部-右-3-2.png').convert('RGBA'),
             'icon_right_3-3_panel': Image.open(res_base / '顶部-右-3-3.png').convert('RGBA'),
             # 静态图标存储为路径，fpdf2 直接接受路径，无需 PIL 预加载
@@ -552,14 +552,7 @@ class MComboVerticalStyle(BoxMarkStyle):
                                    color=(161, 142, 102))
 
         # ── 2. 侧唛标签框（左上角 3cm, 3cm）──────────────────────────────────
-        icon_label_box = self.resources['icon_side_label_box']
-        label_h_mm = 50.0
-        with Image.open(icon_label_box) as _img:
-            _lw, _lh = _img.size
-        label_w_mm = label_h_mm * _lw / _lh
-        pdf.image(icon_label_box,
-                  x=x_mm + 30.0, y=y_mm + 25.0,
-                  w=label_w_mm, h=label_h_mm)
+        # 加拿大样式不需要这个
 
         # ── 3. 侧唛 Logo（右上角，高 5cm，宽不超过 (w-8cm)/2）─────────────────
         icon_side_logo = self.resources['icon_side_logo']
@@ -631,8 +624,8 @@ class MComboVerticalStyle(BoxMarkStyle):
 
         weight_text = (f'G.W./N.W.: {sku_config.side_text["gw_value"] * 0.4535:.1f} / '
                        f'{sku_config.side_text["nw_value"] * 0.4535:.1f} Kg')
-        dim_text = (f'BOX SIZE: {sku_config.l_in:.0f}cm x '
-                    f'{sku_config.w_in:.0f}cm x {sku_config.h_in:.0f}cm')
+        dim_text = (f'BOX SIZE: {sku_config.l_cm:.0f}cm x '
+                    f'{sku_config.w_cm:.0f}cm x {sku_config.h_cm:.0f}cm')
 
         self._draw_text_top_left(pdf, text_x, y_mm + h_mm * 0.063,
                                  weight_text, 'AvantGardeLT-Demi', '', label_pt, pil_label, ppi)
