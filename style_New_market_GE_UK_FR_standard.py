@@ -3,11 +3,9 @@
 MCombo 标准样式 - 将原有的 BoxMarkEngine 转换为样式类
 """
 from fpdf import FPDF
-from PIL import Image, ImageDraw, ImageFont
-from pathlib import Path
+from PIL import Image, ImageFont
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
-from layout_engine import Element, Row, Image as ImageElement
 
 @StyleRegistry.register
 class MComboStandardStyle(BoxMarkStyle):
@@ -23,58 +21,6 @@ class MComboStandardStyle(BoxMarkStyle):
     def get_required_params(self):
         return ['length_cm', 'width_cm', 'height_cm', 'color', 'product', 'size', 'side_text', 'sku_name', 'box_number',
                 'sponge_verified']
-
-    def get_layout_config(self, sku_config):
-        """MCombo 标准样式 - 12块布局（4列3行）"""
-        # 1. 定义 X 轴的关键节点 (横向逻辑在两种模式下通常保持一致)
-        x0 = 0
-        x1 = sku_config.l_px
-        x2 = sku_config.w_px + sku_config.l_px
-        x3 = sku_config.w_px + sku_config.l_px * 2
-
-        # --- 【水平/普通模式】坐标逻辑 ---
-        y0 = 0  # 顶盖顶部
-        y1 = sku_config.half_w_px  # 正身顶部
-        y2 = sku_config.half_w_px + sku_config.h_px  # 底盖顶部
-
-        return {
-            # 第一行：顶盖层
-            "flap_top_front1": (x0, y0, sku_config.l_px, sku_config.half_w_px),
-            "flap_top_side1": (x1, y0, sku_config.w_px, sku_config.half_w_px),
-            "flap_top_front2": (x2, y0, sku_config.l_px, sku_config.half_w_px),
-            "flap_top_side2": (x3, y0, sku_config.w_px, sku_config.half_w_px),
-
-            # 第二行：正身层
-            "panel_front1": (x0, y1, sku_config.l_px, sku_config.h_px),
-            "panel_side1": (x1, y1, sku_config.w_px, sku_config.h_px),
-            "panel_front2": (x2, y1, sku_config.l_px, sku_config.h_px),
-            "panel_side2": (x3, y1, sku_config.w_px, sku_config.h_px),
-
-            # 第三行：底盖层
-            "flap_btm_front1": (x0, y2, sku_config.l_px, sku_config.half_w_px),
-            "flap_btm_side1": (x1, y2, sku_config.w_px, sku_config.half_w_px),
-            "flap_btm_front2": (x2, y2, sku_config.l_px, sku_config.half_w_px),
-            "flap_btm_side2": (x3, y2, sku_config.w_px, sku_config.half_w_px),
-        }
-
-    def get_panels_mapping(self, sku_config):
-        """定义每个区域应该粘贴哪个面板"""
-        return {
-            "flap_top_front1": "left_up",
-            "flap_top_front2": "right_up",
-            "panel_front1": "front",
-            "panel_side1": "side1",
-            "panel_front2": "front",
-            "panel_side2": "side2",
-            "flap_btm_front1": "left_down",
-            "flap_btm_front2": "right_down",
-            "flap_top_side1": "side_up",
-            "flap_top_side2": "side_up",
-            "flap_btm_side1": "side_down",
-            "flap_btm_side2": "side_down",
-        }
-
-    # ── fpdf2 required abstract methods (hybrid PIL → PDF) ──────────────────
 
     def get_layout_config_mm(self, sku_config):
         """mm-based layout for fpdf2 (mirrors get_layout_config in mm)"""
@@ -141,27 +87,6 @@ class MComboStandardStyle(BoxMarkStyle):
 
         # Side up/down — blank (already filled with background)
 
-    def generate_all_panels(self, sku_config):
-        """生成 MCombo 标准样式需要的所有面板"""
-        canvas_left_up, canvas_left_down = self.generate_left_panel(sku_config)
-        canvas_right_up, canvas_right_down = self.generate_right_panel(sku_config)
-        canvas_front = self.generate_front_panel(sku_config)
-        canvas_side1 = self.generate_side_panel(sku_config, show_legal=True)
-        canvas_side2 = self.generate_side_panel(sku_config, show_legal=False)
-        canvas_side_up, canvas_side_down = self.generate_side_up_down_panel(sku_config)
-
-        return {
-            "left_up": canvas_left_up,
-            "left_down": canvas_left_down,
-            "right_up": canvas_right_up,
-            "right_down": canvas_right_down,
-            "front": canvas_front,
-            "side1": canvas_side1,
-            "side2": canvas_side2,
-            "side_up": canvas_side_up,
-            "side_down": canvas_side_down
-        }
-
     def _load_resources(self):
         """加载 MCombo 标准样式的图片资源"""
 
@@ -187,6 +112,7 @@ class MComboStandardStyle(BoxMarkStyle):
             'icon_box_number_1': Image.open(self.res_base / '正唛 Box 1.png').convert('RGBA'),
             'icon_box_number_2': Image.open(self.res_base / '正唛 Box 2.png').convert('RGBA'),
             'icon_box_number_3': Image.open(self.res_base / '正唛 Box 3.png').convert('RGBA'),
+            'icon_box_number_4': Image.open(self.res_base / '正唛 Box 4.png').convert('RGBA'),
             # 'icon_side_label_box': Image.open(res_base / '侧唛标签框.png').convert('RGBA'),
             # 'icon_side_logo': Image.open(res_base / '侧唛logo.png').convert('RGBA'),
             'icon_side_text_box': general_functions.make_it_pure_black(Image.open(self.res_base / '条码框-去掉竖线.png').convert('RGBA')),
@@ -228,335 +154,6 @@ class MComboStandardStyle(BoxMarkStyle):
         }
 
         return self.font_paths
-    def _get_fonts(self, sku_config):
-        """根据箱子尺寸动态计算字体大小"""
-        height_px = sku_config.h_px
-
-        fonts = {
-            'color_font': ImageFont.truetype(
-                self.font_paths['calibri_bold'],
-                size=int(height_px * self.font_ratios['color_font'])
-            ),
-            'product_font': ImageFont.truetype(
-                self.font_paths['itc_demi'],
-                size=int(height_px * self.font_ratios['product_font'])
-            ),
-            'size_font': ImageFont.truetype(
-                self.font_paths['calibri_bold'],
-                size=int(height_px * self.font_ratios['size_font'])
-            ),
-            'regular_font': ImageFont.truetype(
-                self.font_paths['itc_demi'],
-                size=int(height_px * self.font_ratios['regular_font'])
-            ),
-            'legal_reg': ImageFont.truetype(self.font_paths['calibri'], size=28),
-            'legal_bold': ImageFont.truetype(self.font_paths['calibri_bold'], size=28),
-        }
-        return fonts
-
-    def generate_left_panel(self, sku_config):
-
-        """生成左侧面板"""
-        canvas_left_up = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.half_w_px),
-                                   sku_config.background_color)
-        canvas_left_down = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.half_w_px),
-                                     sku_config.background_color)
-
-        total_box_number = sku_config.box_number['total_boxes']
-        icon_left_panel = self.resources[f'icon_left_{total_box_number}_panel']
-
-        icon_left_up_panel = icon_left_panel
-        icon_left_down_panel = icon_left_panel.rotate(180, expand=True)
-
-        canvas_left_up = general_functions.paste_center_with_height(
-            canvas_left_up, icon_left_up_panel, height_cm=10, dpi=sku_config.dpi)
-        canvas_left_down = general_functions.paste_center_with_height(
-            canvas_left_down, icon_left_down_panel, height_cm=10, dpi=sku_config.dpi)
-
-        return canvas_left_up, canvas_left_down
-
-    def generate_right_panel(self, sku_config):
-
-        """生成右侧面板"""
-        canvas_right_up = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.half_w_px),
-                                    sku_config.background_color)
-        canvas_right_down = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.half_w_px),
-                                      sku_config.background_color)
-
-        total_box_number = sku_config.box_number['total_boxes']
-        current_box_number = sku_config.box_number['current_box']
-        icon_right_panel = self.resources[f'icon_right_{total_box_number}-{current_box_number}_panel']
-
-        icon_right_panel_up = icon_right_panel.rotate(180, expand=True)
-        icon_right_panel_down = icon_right_panel
-
-        canvas_right_up = general_functions.paste_center_with_height(
-            canvas_right_up, icon_right_panel_up, height_cm=9, dpi=sku_config.dpi)
-        canvas_right_down = general_functions.paste_center_with_height(
-            canvas_right_down, icon_right_panel_down, height_cm=9, dpi=sku_config.dpi)
-        return canvas_right_up, canvas_right_down
-
-    def generate_front_panel(self, sku_config):
-        """生成正面面板"""
-        canvas = Image.new(sku_config.color_mode, (sku_config.l_px, sku_config.h_px), sku_config.background_color)
-
-        # res_base = self.base_dir / 'assets' / 'New-market' / '样式一' / '矢量文件'
-        if getattr(sku_config, 'GE', 0) == 1:
-            logo_file = self.res_base / '正唛logo-ELEGUE.png'
-        elif getattr(sku_config, 'FR', 0) == 1 or getattr(sku_config, 'UK', 0) == 1:
-            logo_file = self.res_base / '正唛logo-MCombo.png'
-        else:
-            logo_file = self.res_base / '正唛logo-MCombo.png'  # 默认值
-
-        icon_trademark = general_functions.make_it_pure_black(Image.open(logo_file).convert('RGBA'))
-
-        fonts = self._get_fonts(sku_config)
-
-        # 粘贴正唛标志
-        canvas_w, canvas_h = canvas.size
-
-        target_h_by_height = canvas_h // 3
-        icon_by_height = general_functions.scale_by_height(icon_trademark, target_h_by_height)
-        resized_w, resized_h = icon_by_height.size
-
-        # 2. 检查宽度是否超过箱子长度的1/3
-        max_allowed_w = canvas_w // 2  # 箱子长度的1/3
-
-        if resized_w > max_allowed_w:
-            # 宽度超限，改为按宽度缩放
-            icon_trademark_resized = general_functions.scale_by_width(icon_trademark, max_allowed_w)
-        else:
-            # 宽度未超限，使用按高度缩放的结果
-            icon_trademark_resized = icon_by_height
-
-        # icon_trademark_target_h = canvas_h // 3
-        # icon_trademark_resized = general_functions.scale_by_height(icon_trademark, icon_trademark_target_h)
-
-        icon_trademark_target_w, icon_trademark_target_h = icon_trademark_resized.size
-        paste_x = (canvas_w - icon_trademark_target_w) // 2
-        paste_y = 0
-        canvas.paste(icon_trademark_resized, (paste_x, paste_y), mask=icon_trademark_resized)
-
-        draw = ImageDraw.Draw(canvas)
-        bottom_bg_h = int(sku_config.bottom_gb_h * sku_config.dpi)
-
-        # 生成底部黑色底框和动态SKU文本
-        fonts_paths = self._load_fonts()
-        icon_company = general_functions.draw_dynamic_company_brand(
-            sku_config,
-            sku_config.company_name,
-            sku_config.contact_info,
-            fonts_paths,
-            self.resources
-        )
-        icon_box_number = self.resources[f"icon_box_number_{sku_config.box_number['current_box']}"]
-        general_functions.draw_dynamic_bottom_bg_move(canvas, sku_config, icon_company, icon_box_number, self.font_paths)
-
-        # 写入右上角颜色信息
-        color_font = fonts['color_font']
-        color_text = f"{sku_config.color}"
-        bbox = draw.textbbox((0, 0), color_text, font=color_font)
-        text_w = bbox[2] - bbox[0]
-        text_h = bbox[3] - bbox[1]
-        color_x = canvas_w - text_w - int(4 * sku_config.dpi)
-        color_y = int(4 * sku_config.dpi)
-        color_xy = (color_x, color_y)
-
-        draw = general_functions.draw_rounded_bg_for_text(
-            draw, bbox, sku_config, color_xy,
-            bg_color=(0, 0, 0), padding_cm=(0.8, 0.4), radius=16)
-        draw.text((color_x, color_y), color_text, font=color_font, fill=(161, 142, 102))
-
-        # 写入产品名称和尺寸信息
-        # ========== 修改开始：动态调整 product 字体大小 ==========
-        fonts = self._get_fonts(sku_config)
-
-        # 计算 product 文字的最大允许宽度（箱子长度的85%）
-        max_product_width = int(sku_config.l_px * 0.85)
-
-        product_text = sku_config.product
-        product_font = fonts['product_font']
-
-        # 检查当前字体是否超出限制，如果超出则缩小字体
-        bbox_product = product_font.getbbox(product_text)
-        product_w = bbox_product[2] - bbox_product[0]
-
-        # 如果文字宽度超过限制，按比例缩小字体
-        if product_w > max_product_width:
-            scale_factor = max_product_width / product_w
-            new_font_size = int(product_font.size * scale_factor)
-            # 重新加载字体，使用新的大小
-            product_font = ImageFont.truetype(
-                self.font_paths['itc_demi'],
-                size=new_font_size
-            )
-            # 重新计算文字宽度
-            bbox_product = product_font.getbbox(product_text)
-            product_w = bbox_product[2] - bbox_product[0]
-
-        # product_text = sku_config.product
-        # product_font = fonts['product_font']
-        # bbox_product = draw.textbbox((0, 0), product_text, font=product_font)
-        # product_w = bbox_product[2] - bbox_product[0]
-
-        size_text = getattr(sku_config, 'size', None) or " " # 如果尺寸信息为空，则使用一个空格占位，避免后续计算出错
-        size_font = fonts['size_font']
-        bbox_size = draw.textbbox((0, 0), size_text, font=size_font)
-        size_w = bbox_size[2] - bbox_size[0]
-
-        gap_px = int(1 * sku_config.dpi)
-        # line_height = 7 / 0.74
-        line_height = int(0.3 * sku_config.dpi) # 黑线加粗到约 0.5cm
-        line_width = int(product_w * 0.85)
-        total_group_height = product_font.size + line_height + size_font.size + gap_px * 2
-
-        remaining_space = canvas_h - icon_trademark_target_h - bottom_bg_h
-        group_start_y = icon_trademark_target_h + (remaining_space - total_group_height) // 2
-
-        # 绘制产品名称
-        product_x = (canvas_w - product_w) // 2
-        ascent, descent = product_font.getmetrics()
-        # draw.text((product_x, group_start_y + ascent), product_text, font=product_font, fill=(0, 0, 0), anchor="ls")
-        product_offset_y = int(0.5 * sku_config.dpi)  # 产品信息上移约 0.5cm
-        draw.text((product_x, group_start_y + ascent - product_offset_y), product_text, font=product_font, fill=(0, 0, 0), anchor="ls")
-
-        # 绘制下划线
-        line_y_top = group_start_y + product_font.size + gap_px
-        line_x0 = (canvas_w - line_width) // 2
-        line_x1 = line_x0 + line_width
-        line_box = [line_x0, line_y_top, line_x1, line_y_top + line_height]
-        general_functions.draw_smooth_ellipse(draw, canvas, line_box, fill=(0, 0, 0))
-
-        # 绘制尺寸信息
-        size_x = (canvas_w - size_w) // 2
-        size_y = line_y_top + gap_px + line_height
-        draw.text((size_x, size_y), size_text, font=size_font, fill=(0, 0, 0))
-
-        return canvas
-
-    def generate_side_panel(self, sku_config, show_legal=True):
-        """生成侧面面板"""
-        if not hasattr(self, 'fonts') or not self.fonts:
-            self.fonts = self._get_fonts(sku_config)
-
-        canvas = Image.new(sku_config.color_mode, (sku_config.w_px, sku_config.h_px), sku_config.background_color)
-
-        # res_base = self.base_dir / 'assets' / 'New-market' / '样式一' / '矢量文件'
-        if getattr(sku_config, 'GE', 0) == 1:
-            logo_file = self.res_base / '侧唛logo-ELEGUE.png'
-        elif getattr(sku_config, 'FR', 0) == 1 or getattr(sku_config, 'UK', 0) == 1:
-            logo_file = self.res_base / '侧唛logo-MCombo.png'
-        else:
-            logo_file = self.res_base / '侧唛logo-MCombo.png'  # 默认值
-
-        icon_side_logo = general_functions.make_it_pure_black(Image.open(logo_file).convert('RGBA'))
-
-        # 1. 初始化画布
-        draw = ImageDraw.Draw(canvas)
-        dpi = sku_config.dpi
-        font_paths = self._load_fonts()
-
-        # 2. 绘制底部黑色异形框 (带 S 弯逻辑)
-        icon_company = general_functions.draw_dynamic_company_brand(
-            sku_config, sku_config.company_name, sku_config.contact_info, font_paths, self.resources
-        )
-        safe_x_start = general_functions.draw_side_dynamic_bottom_bg_standard_move(canvas, sku_config, icon_company, font_paths)
-
-        # 3. 绘制侧唛 Logo (右上角固定位置)
-        # icon_side_logo = self.resources['icon_side_logo']
-
-        icon_side_logo_resized = general_functions.scale_by_height(icon_side_logo, int(5 * dpi))
-        icon_side_logo_w, icon_side_logo_h = icon_side_logo_resized.size
-        icon_side_logo_x = canvas.width - icon_side_logo_w - int(3 * dpi)
-        icon_side_logo_y = int(3 * dpi)
-
-        canvas.paste(icon_side_logo_resized, (icon_side_logo_x, icon_side_logo_y), mask=icon_side_logo_resized)
-
-        # --- 核心修改：动态组合 [海绵标 | FSC标 | 侧唛文本框] ---
-        side_images = []
-        table_h_px = int(8 * dpi)  # 固定高度 8cm
-        gap_img = Image.new('RGBA', (int(0.3 * dpi), table_h_px), (0, 0, 0, 0))
-
-        # A. 海绵认证标 (根据开关 sponge_verified 判断)
-        if getattr(sku_config, 'sponge_verified', False) == True:
-            img_s_res = general_functions.scale_by_height(self.resources['icon_side_sponge'].copy(), table_h_px)
-            side_images.append(img_s_res)
-
-        # B. FSC 认证标 (根据开关 show_fsc 判断)
-        if getattr(sku_config, 'show_fsc', False) == True:
-            if side_images:
-                side_images.append(gap_img)
-            img_f_res = general_functions.scale_by_height(self.resources['icon_side_FSC'].copy(), table_h_px)
-            side_images.append(img_f_res)
-
-        # C. 侧唛文本框 (固定必有)
-        if side_images:
-            side_images.append(gap_img)
-        raw_box = general_functions.scale_by_height(self.resources['icon_side_text_box'].copy(), table_h_px)
-        filled_box = general_functions.fill_sidepanel_text_1(raw_box, sku_config, font_paths)
-        side_images.append(filled_box)
-
-        # --- 直接粘贴每个元素 ---
-        target_x = int(3.0 * dpi)
-        bottom_gb_h_px = int(sku_config.bottom_gb_h * dpi)
-        target_y = canvas.height - bottom_gb_h_px - int(2.0 * dpi) - table_h_px
-        current_x = target_x
-        for img in side_images:
-            paste_y = target_y + (table_h_px - img.height) // 2
-            canvas.paste(img, (current_x, paste_y), mask=img if img.mode == 'RGBA' else None)
-            current_x += img.width
-
-        # --- 法律标动态放置逻辑 ---
-        # res_base = self.base_dir / 'assets' / 'New-market' / '样式一' / '矢量文件'
-        if getattr(sku_config, 'GE', 0) == 1:
-            legal_icon = self.res_base / '法律标-2-1-GE.png'
-        elif getattr(sku_config, 'FR', 0) == 1 or getattr(sku_config, 'UK', 0) == 1:
-            legal_icon = self.res_base / '法律标-2-2-UK-FR.png'
-        else:
-            legal_icon = self.res_base / '法律标-2-2-UK-FR.png'
-
-        self.resources['legal_icon_2_2'] = general_functions.make_it_pure_black(Image.open(legal_icon).convert('RGBA'))
-        if show_legal and sku_config.legal_data:
-            tw, th = canvas.size
-            dpi = sku_config.dpi
-
-            # 法律标宽度 22.4cm，距右边缘 4cm
-            legal_box_w_px = int(22.4 * dpi)
-            # 法律标框与侧唛右侧的距离暂定3cm
-            right_margin_px = int(2.0 * dpi)
-
-            # 计算法律标左边缘在画布上的真实 X 坐标
-            target_x = tw - legal_box_w_px - right_margin_px
-
-            # --- 核心判断：法律标左边缘 vs S弯结束点 ---
-            # 我们预留 1.0cm 的物理缓冲空间
-            buffer_px = int(1.0 * dpi)
-
-            if target_x < (safe_x_start - 2 * buffer_px):
-                # 如果法律标的左侧撞到了 S 弯平整段的起点
-                # 说明 SKU 字符太长，S 弯被推向了右侧，此时法律标必须抬起
-                target_y = th - int(12 * dpi) - int(14.0 * dpi)
-            else:
-                # 空间足够，法律标可以落在常规的 7cm 高度处
-                target_y = th - int(7.0 * dpi) - int(14.0 * dpi)
-
-            # 绘制法律标
-            general_functions.draw_legal_label_component(
-                canvas, target_x, target_y, sku_config,
-                self.resources, self.fonts, sku_config.legal_data
-            )
-
-        return canvas
-
-    def generate_side_up_down_panel(self, sku_config):
-
-        # canvas = Image.new(sku_config.color_mode, (sku_config.h_px, sku_config.w_px), sku_config.background_color)
-        canvas_side_up = Image.new(sku_config.color_mode, (sku_config.w_px, sku_config.half_w_px), sku_config.background_color)
-        canvas_side_down = Image.new(sku_config.color_mode, (sku_config.w_px, sku_config.half_w_px), sku_config.background_color)
-        return canvas_side_up, canvas_side_down
-
-    # ── fpdf2 vector helper methods ─────────────────────────────────────────────
-
     def _get_logo_file(self, sku_config):
         """Return the front-panel logo path based on market flag (GE/FR/UK)."""
         if getattr(sku_config, 'GE', 0) == 1:
@@ -564,22 +161,6 @@ class MComboStandardStyle(BoxMarkStyle):
         elif getattr(sku_config, 'FR', 0) == 1 or getattr(sku_config, 'UK', 0) == 1:
             return self.res_base / '正唛logo-MCombo.png'
         return self.res_base / '正唛logo-MCombo.png'
-
-    def _generate_bottom_bar(self, sku_config):
-        """Generate the bottom bar section of the front panel as a PIL image."""
-        canvas = Image.new(sku_config.color_mode,
-                           (sku_config.l_px, sku_config.h_px),
-                           sku_config.background_color)
-        icon_company = general_functions.draw_dynamic_company_brand(
-            sku_config, sku_config.company_name, sku_config.contact_info,
-            self.font_paths, self.resources)
-        icon_box_number = self.resources[
-            f"icon_box_number_{sku_config.box_number['current_box']}"]
-        general_functions.draw_dynamic_bottom_bg_move(
-            canvas, sku_config, icon_company, icon_box_number, self.font_paths)
-        bottom_h_px = int(sku_config.bottom_gb_h * sku_config.dpi)
-        return canvas.crop((0, canvas.height - bottom_h_px,
-                            canvas.width, canvas.height))
 
     @staticmethod
     def _pil_bbox_mm(pil_font, text, ppi):
@@ -788,7 +369,7 @@ class MComboStandardStyle(BoxMarkStyle):
         iy = y_mm + (h_mm - icon_h) / 2.0
         pdf.image(icon_to_use, x=ix, y=iy, w=icon_w, h=icon_h)
 
-    # ── fully-vector bottom bar (replaces _generate_bottom_bar raster) ─────────
+    # ── fully-vector bottom bar ────────────────────────────────────────────────
 
     def _draw_bottom_bar_v(self, pdf, sku_config, x_mm, y_mm, panel_w_mm, panel_h_mm):
         """Draw the front-panel bottom bar entirely in fpdf2 (S-curve + vector text)."""
@@ -848,7 +429,7 @@ class MComboStandardStyle(BoxMarkStyle):
             x3_mm = left_section_w_mm - margin_10cm_mm
             x4_mm = left_section_w_mm
             brand_x_mm = x_mm + margin_1cm_mm
-            brand_y_mm = panel_bottom - h_right_mm + (h_right_mm - h_left_mm) / 2.0 - icon_h_mm / 2.0
+            brand_y_mm = panel_bottom - h_right_mm
             sku_area_l = x_mm + x4_mm - 6 * sku_margin_mm
             sku_area_r = x_mm + panel_w_mm - sku_margin_mm
         else:
@@ -1028,7 +609,7 @@ class MComboStandardStyle(BoxMarkStyle):
         # ── 5. Side elements: [sponge?] [fsc?] [barcode box] ─────────────────
         table_h_mm      = 80.0   # 8 cm
         bottom_gb_h_mm  = sku_config.bottom_gb_h * 10.0
-        # same y-offset formula as generate_side_panel (standard: -2cm, vertical: -1cm)
+        # standard side-panel spacing
         gap_above_bar_mm = 20.0 if h_left_mm >= 100.0 else 10.0
         elem_y = panel_bottom - bottom_gb_h_mm - gap_above_bar_mm - table_h_mm
         gap_mm = 3.0   # 0.3 cm gap

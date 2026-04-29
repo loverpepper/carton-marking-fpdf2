@@ -23,8 +23,8 @@ import style_exacme_topandbottom_doubleringandburiedtrampoline
 import style_CA_mcombo_standard
 import style_CA_mcombo_vertical
 import style_AU_mcombo_standard
-import style_New_market_GE_UK_FR_vertical
 import style_New_market_GE_UK_FR_standard
+import style_New_market_GE_UK_FR_vertical
 import style_macrout_topandbottom   
 import style_lovupet_doubleopening
 # 未来在这里导入更完成 fpdf2 重构的更多样式：
