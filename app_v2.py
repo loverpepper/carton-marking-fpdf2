@@ -103,6 +103,28 @@ TEMPLATE_COLUMNS = [
 COL_KEYS = [c[0] for c in TEMPLATE_COLUMNS]
 
 
+PDF_LABEL_TRANSLATION = str.maketrans({
+    "（": "(",
+    "）": ")",
+    "［": "[",
+    "］": "]",
+    "【": "[",
+    "】": "]",
+    "－": "-",
+    "–": "-",
+    "—": "-",
+    "／": "/",
+    "：": ":",
+    "，": ",",
+    "　": " ",
+})
+
+
+def normalize_pdf_label(value) -> str:
+    """Normalize common full-width punctuation before drawing with Latin fonts."""
+    return str(value).translate(PDF_LABEL_TRANSLATION).strip()
+
+
 @st.cache_data(show_spinner=False)
 def get_available_styles_cached() -> list:
     """Return style metadata without repeating registry work on every rerun."""
@@ -260,7 +282,7 @@ def row_to_skuconfig(row: dict, base_dir) -> SKUConfig:
 
     size = get("size")
     if size is not None:
-        style_params["size"] = str(size).strip()
+        style_params["size"] = normalize_pdf_label(size)
 
     sponge_raw = get("sponge_verified", "否")
     style_params["sponge_verified"] = str(sponge_raw).strip() in ("是", "True", "true", "1", "yes", "Yes")
@@ -475,7 +497,7 @@ with tab_single:
         if product: style_params['product'] = product
         if product_fullname.strip():
             style_params['product_fullname'] = product_fullname.replace("\\n", "\n")
-        if size:    style_params['size'] = size
+        if size:    style_params['size'] = normalize_pdf_label(size)
 
     # ── 列 2：侧唛信息 ──
     with sp_col2:

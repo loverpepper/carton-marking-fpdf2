@@ -379,8 +379,8 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         pil_bc_label = ImageFont.truetype(self.font_paths['Arial Regular'], bc_label_size_px)
 
         # —— 文字内容 ——
-        weight_text = (f"G.W./N.W. : {sku_config.side_text['gw_value']} / "
-                       f"{sku_config.side_text['nw_value']} lbs")
+        weight_text = (f"G.W./N.W. : {sku_config.side_text['gw_value']:.1f} / "
+                       f"{sku_config.side_text['nw_value']:.1f} lbs")
         box_text = (f"BOX SIZE : {sku_config.l_in:.1f}\" x "
                     f"{sku_config.w_in:.1f}\" x {sku_config.h_in:.1f}\"")
 
