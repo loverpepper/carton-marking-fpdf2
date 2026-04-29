@@ -30,7 +30,12 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 # 导入新版生成核心
-from generation_core_v3 import SKUConfig, BoxMarkGenerator
+from generation_core_v3 import (
+    SKUConfig,
+    BoxMarkGenerator,
+    get_style_source_signature,
+    reload_style_module,
+)
 
 # 导入所有样式以自动注册
 import style_mcombo_standard
@@ -104,8 +109,44 @@ def get_available_styles_cached() -> list:
     return BoxMarkGenerator.list_available_styles()
 
 
-def get_boxmark_generator(style_name: str, ppi: int) -> BoxMarkGenerator:
+def ensure_style_code_current(style_name: str) -> None:
+    """
+    在生成动作前检查目标样式文件是否被本地修改。
+
+    Streamlit  rerun 不会自动 reload 已导入的 Python 模块；这里仅在样式
+    源文件 mtime/size 变化时重载当前样式模块，并丢弃该样式的生成器缓存。
+    """
+    if "_style_source_signatures" not in st.session_state:
+        st.session_state._style_source_signatures = {}
+
+    signatures = st.session_state._style_source_signatures
+    current_signature = get_style_source_signature(style_name)
+    previous_signature = signatures.get(style_name)
+    if previous_signature == current_signature:
+        return
+
+    if previous_signature is None:
+        logger.info(f"首次生成前刷新样式模块: {style_name}")
+    else:
+        logger.info(f"检测到样式代码变更，重载样式模块: {style_name}")
+
+    current_signature = reload_style_module(style_name)
+    signatures[style_name] = current_signature
+
+    if "_boxmark_generator_cache" in st.session_state:
+        cache = st.session_state._boxmark_generator_cache
+        for cache_key in list(cache.keys()):
+            if cache_key[0] == style_name:
+                del cache[cache_key]
+
+    get_available_styles_cached.clear()
+
+
+def get_boxmark_generator(style_name: str, ppi: int, refresh_style_code: bool = False) -> BoxMarkGenerator:
     """Reuse loaded style resources within the current Streamlit session."""
+    if refresh_style_code:
+        ensure_style_code_current(style_name)
+
     cache_key = (style_name, int(ppi))
     if "_boxmark_generator_cache" not in st.session_state:
         st.session_state._boxmark_generator_cache = {}
@@ -569,7 +610,7 @@ with tab_single:
                     country=nm_country if nm_country else None,
                     **style_params
                 )
-                generator = get_boxmark_generator(selected_style, ppi)
+                generator = get_boxmark_generator(selected_style, ppi, refresh_style_code=True)
 
                 # 生成 PDF 字节（fpdf2 直接输出，矢量清晰）
                 pdf_bytes_data = generator.generate_pdf_bytes(test_sku)
@@ -756,7 +797,7 @@ with tab_batch:
 
                             try:
                                 sku_cfg  = row_to_skuconfig(row_dict, base_dir)
-                                gen = get_boxmark_generator(sku_cfg.style_name, sku_cfg.ppi)
+                                gen = get_boxmark_generator(sku_cfg.style_name, sku_cfg.ppi, refresh_style_code=True)
                                 pdf_bytes_item = gen.generate_pdf_bytes(sku_cfg)
 
                                 # 文件名去除非法字符
@@ -895,7 +936,7 @@ with tab_stats:
                 st.bar_chart(chart_data)
                 
                 with st.expander("📝 查看数据明细表 (含具体SKU与名称)"):
-                    st.dataframe(filtered_df.sort_values(by=['生成日期', '时间'], ascending=[False, False]), use_container_width=True, hide_index=True)
+                    st.dataframe(filtered_df.sort_values(by=['生成日期', '时间'], ascending=[False, False]), width='stretch', hide_index=True)
             else:
                 st.warning("⚠️ 该日期范围或筛选条件下目前没有记录。")
         else:
@@ -905,7 +946,7 @@ with tab_stats:
         st.subheader("🏆 全生命周期样式热度排行榜")
         df_overall = stats_db.get_overall_stats()
         if not df_overall.empty:
-            st.dataframe(df_overall, use_container_width=True, hide_index=True)
+            st.dataframe(df_overall, width='stretch', hide_index=True)
         else:
             st.info("目前还没有任何记录哦。")
 

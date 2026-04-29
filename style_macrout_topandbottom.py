@@ -90,10 +90,10 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         """加载字体文件路径"""
         font_base = self.base_dir / 'assets' / 'Macrout' / '天地盖' / '箱唛字体'
         self.font_paths = {
-            'Calibri':                              str(font_base / 'calibri.ttf'),
+            'Calibri Regular':                      str(font_base / 'calibri.ttf'),
             'ITC Avant Garde Gothic Demi Cyrillic': str(font_base / 'itc-avant-garde-gothic-demi-cyrillic.otf'),
             'Arial Rounded MT Bold':                str(font_base / 'ARLRDBD.ttf'),
-            'Arial':                                str(font_base / 'arial.ttf'),
+            'Arial Regular':                        str(font_base / 'arial.ttf'),
             'Arial Bold':                           str(font_base / 'arialbd.ttf'),
         }
 
@@ -103,7 +103,7 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         """向 FPDF 对象注册本样式使用的所有字体"""
         pdf.add_font('ITCAvantGarde', '',  self.font_paths['ITC Avant Garde Gothic Demi Cyrillic'])
         pdf.add_font('ArialRounded',  '',  self.font_paths['Arial Rounded MT Bold'])
-        pdf.add_font('Arial',         '',  self.font_paths['Arial'])
+        pdf.add_font('Arial',         '',  self.font_paths['Arial Regular'])
         pdf.add_font('Arial',         'B', self.font_paths['Arial Bold'])
 
     # ── 核心绘制入口 ────────────────────────────────────────────────────────────
@@ -186,17 +186,6 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         pdf.set_text_color(0, 0, 0)
         pdf.text(x_mm, baseline_y, text)
 
-    @staticmethod
-    def _barcode_on_white(barcode_img):
-        """将条形码图片（透明背景）合并到白底，返回 PIL Image。
-        fpdf2 并不识别透明 PNG 的正确 alpha 合成，需要手动先叠加白底。"""
-        bg = Image.new('RGB', barcode_img.size, (255, 255, 255))
-        if barcode_img.mode == 'RGBA':
-            bg.paste(barcode_img, mask=barcode_img.split()[3])
-        else:
-            bg.paste(barcode_img.convert('RGB'))
-        return bg
-
     # ── 面板绘制方法 ────────────────────────────────────────────────────────────
 
     def _draw_top_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
@@ -220,28 +209,28 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         sku_text     = sku_config.sku_name
         color_text   = sku_config.color
 
-        product_pt, pil_product = self._get_font_size(
+        product_pt, _ = self._get_font_size(
             product_text, 'ITC Avant Garde Gothic Demi Cyrillic', w_mm * 0.36, ppi)
-        sku_pt, pil_sku = self._get_font_size(
+        sku_pt, _ = self._get_font_size(
             sku_text, 'Arial Rounded MT Bold', w_mm * 0.43, ppi)
-        color_pt, pil_color = self._get_font_size(
-            color_text, 'Arial', w_mm * 0.09, ppi)
+        color_pt, _ = self._get_font_size(
+            color_text, 'Arial Regular', w_mm * 0.09, ppi)
 
         middle_col = engine.Column(
             align='center', justify='start',
             spacing=h_mm * 0.062,
             children=[
-                engine.Text(product_text, 'ITCAvantGarde', '', product_pt,
-                            pil_font=pil_product, ppi=ppi, nudge_y=h_mm * 0.02),
-                engine.Text(sku_text, 'ArialRounded', '', sku_pt,
-                            pil_font=pil_sku, ppi=ppi),
+                engine.Text(product_text, 'ITCAvantGarde', product_pt,
+                            font_path=self.font_paths["ITC Avant Garde Gothic Demi Cyrillic"], ppi=ppi, nudge_y=h_mm * 0.02),
+                engine.Text(sku_text, 'ArialRounded', sku_pt,
+                            font_path=self.font_paths['Arial Rounded MT Bold'], ppi=ppi),
                 engine.Row(
                     justify='start', align='center',
                     spacing=w_mm * 0.04,
                     children=[
                         engine.Image(self.resources['icon_notice'], width=w_mm * 0.21),
-                        engine.Text(color_text, 'Arial', '', color_pt,
-                                    pil_font=pil_color, ppi=ppi),
+                        engine.Text(color_text, 'Arial', color_pt,
+                                    font_path=self.font_paths['Arial Regular'], ppi=ppi),
                     ]
                 ),
             ]
@@ -276,7 +265,7 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         ppi = sku_config.ppi
 
         sku_text = sku_config.sku_name
-        sku_pt, pil_sku = self._get_font_size(
+        sku_pt, _ = self._get_font_size(
             sku_text, 'Arial Rounded MT Bold', w_mm * 0.41, ppi)
 
         # engine.Image 会从文件头读取宽高比，自动算出 height
@@ -289,8 +278,8 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
             fixed_width=w_mm,
             padding=w_mm * 0.05,
             children=[
-                engine.Text(sku_text, 'ArialRounded', '', sku_pt,
-                            pil_font=pil_sku, ppi=ppi),
+                engine.Text(sku_text, 'ArialRounded', sku_pt,
+                            font_path=self.font_paths['Arial Rounded MT Bold'], ppi=ppi),
                 label_img,
             ]
         )
@@ -343,7 +332,7 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         barcode_frame_h_mm = 50.0  # 5 cm
 
         sku_text = sku_config.sku_name
-        sku_pt, pil_sku = self._get_font_size(
+        sku_pt, _ = self._get_font_size(
             sku_text, 'Arial Bold', nat_w * 0.5, ppi)
 
         main_row = engine.Row(
@@ -352,8 +341,8 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
             padding_x=nat_w * 0.07,
             children=[
                 engine.Image(icon_barcode_frame, height=barcode_frame_h_mm),
-                engine.Text(sku_text, 'Arial', 'B', sku_pt,
-                            pil_font=pil_sku, ppi=ppi),
+                engine.Text(sku_text, 'Arial', sku_pt,
+                            font_style='B', font_path=self.font_paths['Arial Bold'], ppi=ppi),
             ]
         )
 
@@ -387,7 +376,7 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
         # 原代码：font_barcode = int(H * 0.12)
         bc_label_size_px = int(h_mm * 0.12 * px_per_mm)
         bc_label_size_pt = bc_label_size_px * 72.0 / ppi
-        pil_bc_label = ImageFont.truetype(self.font_paths['Arial'], bc_label_size_px)
+        pil_bc_label = ImageFont.truetype(self.font_paths['Arial Regular'], bc_label_size_px)
 
         # —— 文字内容 ——
         weight_text = (f"G.W./N.W. : {sku_config.side_text['gw_value']} / "
@@ -417,7 +406,7 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
             int(sku_bc_w_mm * px_per_mm),
             int(bc_h_mm * px_per_mm),
         )
-        pdf.image(self._barcode_on_white(sku_bc_img),
+        pdf.image(sku_bc_img,
                   x=sku_bc_x, y=sku_bc_y, w=sku_bc_w_mm, h=bc_h_mm)
 
         # SKU 条形码下方文字（顶-中对齐）
@@ -438,7 +427,7 @@ class MacroutTopAndBottomStyle(BoxMarkStyle):
             int(sn_bc_w_mm * px_per_mm),
             int(bc_h_mm * px_per_mm),
         )
-        pdf.image(self._barcode_on_white(sn_bc_img),
+        pdf.image(sn_bc_img,
                   x=sn_bc_x, y=sn_bc_y, w=sn_bc_w_mm, h=bc_h_mm)
 
         # SN 条形码下方文字（顶-中对齐）

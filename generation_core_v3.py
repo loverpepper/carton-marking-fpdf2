@@ -2,6 +2,9 @@
 """
 新版核心生成引擎 - 使用样式注册系统（fpdf2 版）
 """
+import importlib
+import inspect
+import sys
 from pathlib import Path
 from fpdf import FPDF
 from style_base import StyleRegistry
@@ -29,6 +32,32 @@ import style_lovupet_doubleopening
 # import style_premium
 # import style_custom_a
 # etc.
+
+
+def get_style_source_signature(style_name: str) -> tuple:
+    """Return the source file signature for a registered style class."""
+    style_class = StyleRegistry.get_style_class(style_name)
+    source_path = Path(inspect.getfile(style_class)).resolve()
+    stat = source_path.stat()
+    return str(source_path), stat.st_mtime_ns, stat.st_size
+
+
+def reload_style_module(style_name: str) -> tuple:
+    """
+    Reload only the Python module that defines the requested style.
+
+    The module's @StyleRegistry.register decorator refreshes the registered
+    style class during reload. This keeps Streamlit reruns fast because we do
+    not re-import every style module on each button click.
+    """
+    style_class = StyleRegistry.get_style_class(style_name)
+    module_name = style_class.__module__
+    module = sys.modules.get(module_name)
+    if module is None:
+        importlib.import_module(module_name)
+    else:
+        importlib.reload(module)
+    return get_style_source_signature(style_name)
 
 
 class SKUConfig:

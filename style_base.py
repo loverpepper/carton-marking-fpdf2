@@ -121,6 +121,15 @@ class StyleRegistry:
         return cls._styles[style_name](base_dir=base_dir, ppi=ppi)
 
     @classmethod
+    def get_style_class(cls, style_name: str):
+        """根据名称获取已注册的样式类，不实例化资源。"""
+        if style_name not in cls._styles:
+            raise ValueError(
+                f"未找到样式: '{style_name}'。可用样式: {list(cls._styles.keys())}"
+            )
+        return cls._styles[style_name]
+
+    @classmethod
     def get_all_styles(cls) -> list:
         """获取所有已注册样式的信息列表"""
         return [dict(cls._style_info[name]) for name in cls._styles]
