@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-MCombo 标准样式 - fpdf2 版
+MCombo 通用箱唛标准样式 - fpdf2 版
 """
 from fpdf import FPDF
 from PIL import Image, ImageFont
@@ -11,21 +11,21 @@ import layout_engine as engine
 
 
 @StyleRegistry.register
-class MComboStandardStyle(BoxMarkStyle):
-    """MCombo 标准箱唛样式 (fpdf2 版)"""
+class MComboGeneralStandardStyle(BoxMarkStyle):
+    """MCombo 通用箱唛标准样式 (fpdf2 版)"""
 
     def get_style_name(self):
-        return "mcombo_standard"
+        return "mcombo_general_standard"
 
     def get_style_description(self):
-        return "MCombo 第一箱 箱唛样式"
+        return "MCombo 通用箱唛标准样式"
 
     def get_required_params(self):
         return ['length_cm', 'width_cm', 'height_cm', 'color', 'product',
                 'size', 'side_text', 'sku_name', 'box_number', 'sponge_verified']
 
     def get_layout_config_mm(self, sku_config):
-        """MCombo 标准样式 - 12块布局（4列3行），单位 mm"""
+        """MCombo 通用箱唛标准样式 - 12块布局（4列3行），单位 mm"""
         l_mm = sku_config.l_cm * 10
         w_mm = sku_config.w_cm * 10
         h_mm = sku_config.h_cm * 10
@@ -92,36 +92,10 @@ class MComboStandardStyle(BoxMarkStyle):
     # ── 资源 / 字体加载 ─────────────────────────────────────────────────────────
 
     def _load_resources(self):
-        """加载 MCombo 标准样式的图片资源。
+        """加载 MCombo 通用箱唛标准样式的图片资源。
         翻盖图标因需要旋转操作，保留为 PIL Image；其余资源存储为路径，fpdf2 直接接受。"""
         res_base = self.base_dir / 'assets' / 'Mcombo' / '样式一' / '矢量文件'
         self.resources = {
-            # 翻盖图标需要 PIL 旋转，保留为 PIL Image
-            'icon_left_2_panel':    Image.open(res_base / '顶部-左-2箱.png').convert('RGBA'),
-            'icon_left_3_panel':    Image.open(res_base / '顶部-左-3箱.png').convert('RGBA'),
-            'icon_left_4_panel':    Image.open(res_base / '顶部-左-4箱.png').convert('RGBA'),
-            'icon_left_5_panel':    Image.open(res_base / '顶部-左-5箱.png').convert('RGBA'),
-            'icon_left_6_panel':    Image.open(res_base / '顶部-左-6箱.png').convert('RGBA'),
-            'icon_right_2-1_panel': Image.open(res_base / '顶部-右-2-1.png').convert('RGBA'),
-            'icon_right_2-2_panel': Image.open(res_base / '顶部-右-2-2.png').convert('RGBA'),
-            'icon_right_3-1_panel': Image.open(res_base / '顶部-右-3-1.png').convert('RGBA'),
-            'icon_right_3-2_panel': Image.open(res_base / '顶部-右-3-2.png').convert('RGBA'),
-            'icon_right_3-3_panel': Image.open(res_base / '顶部-右-3-3.png').convert('RGBA'),
-            'icon_right_4-1_panel': Image.open(res_base / '顶部-右-4-1.png').convert('RGBA'),
-            'icon_right_4-2_panel': Image.open(res_base / '顶部-右-4-2.png').convert('RGBA'),
-            'icon_right_4-3_panel': Image.open(res_base / '顶部-右-4-3.png').convert('RGBA'),
-            'icon_right_4-4_panel': Image.open(res_base / '顶部-右-4-4.png').convert('RGBA'),
-            'icon_right_5-1_panel': Image.open(res_base / '顶部-右-5-1.png').convert('RGBA'),
-            'icon_right_5-2_panel': Image.open(res_base / '顶部-右-5-2.png').convert('RGBA'),
-            'icon_right_5-3_panel': Image.open(res_base / '顶部-右-5-3.png').convert('RGBA'),
-            'icon_right_5-4_panel': Image.open(res_base / '顶部-右-5-4.png').convert('RGBA'),
-            'icon_right_5-5_panel': Image.open(res_base / '顶部-右-5-5.png').convert('RGBA'),
-            'icon_right_6-1_panel': Image.open(res_base / '顶部-右-6-1.png').convert('RGBA'),
-            'icon_right_6-2_panel': Image.open(res_base / '顶部-右-6-2.png').convert('RGBA'),
-            'icon_right_6-3_panel': Image.open(res_base / '顶部-右-6-3.png').convert('RGBA'),
-            'icon_right_6-4_panel': Image.open(res_base / '顶部-右-6-4.png').convert('RGBA'),
-            'icon_right_6-5_panel': Image.open(res_base / '顶部-右-6-5.png').convert('RGBA'),
-            'icon_right_6-6_panel': Image.open(res_base / '顶部-右-6-6.png').convert('RGBA'),
             # 静态图标存储为路径，fpdf2 直接接受路径，无需 PIL 预加载
             'icon_trademark':       res_base / '正唛logo.png',
             'icon_company':         res_base / '正唛公司信息.png',
@@ -134,6 +108,7 @@ class MComboStandardStyle(BoxMarkStyle):
             'icon_side_label_box':  res_base / '侧唛标签框.png',
             'icon_side_logo':       res_base / '侧唛logo.png',
             'icon_side_text_box':   res_base / '侧唛文本框.png',
+            'icon_flap_keepboxes':  res_base / '通用箱唛-保留盒子.png',
             # 海绵认证图需要颜色处理，保留为 PIL Image
             'icon_side_sponge':     general_functions.make_it_pure_black(
                                         Image.open(res_base / '海绵认证.png').convert('RGBA')),
@@ -189,8 +164,6 @@ class MComboStandardStyle(BoxMarkStyle):
         self._draw_side_panel(pdf, sku_config, x3, y1, w_mm, h_mm)
 
         # 顶盖翻盖：左侧正常放置；右侧 up 旋转 180°（匹配原始逻辑）
-        self._draw_flap_left(pdf, sku_config, x0, 0.0,  l_mm, half_w_mm, rotate_180=False)
-        self._draw_flap_left(pdf, sku_config, x0, y2,   l_mm, half_w_mm, rotate_180=True)
         self._draw_flap_right(pdf, sku_config, x2, 0.0, l_mm, half_w_mm, rotate_180=True)
         self._draw_flap_right(pdf, sku_config, x2, y2,  l_mm, half_w_mm, rotate_180=False)
 
@@ -293,41 +266,20 @@ class MComboStandardStyle(BoxMarkStyle):
 
     # ── 面板绘制方法 ────────────────────────────────────────────────────────────
 
-    def _draw_flap_left(self, pdf: FPDF, sku_config,
-                        x_mm, y_mm, w_mm, h_mm, rotate_180=False):
-        """绘制左侧翻盖面板（up 正常，down 旋转 180°）"""
-        total_boxes = sku_config.box_number['total_boxes']
-        icon = self.resources[f'icon_left_{total_boxes}_panel']
-
-        # 目标高度 100mm（10cm）；超宽时改用宽度约束 80%
-        target_h_mm = 100.0
-        max_w_mm = w_mm * 0.8
-        icon_w_natural = target_h_mm * icon.width / icon.height
-        if icon_w_natural > max_w_mm:
-            icon_w_mm = max_w_mm
-            icon_h_mm = icon_w_mm * icon.height / icon.width
-        else:
-            icon_w_mm = icon_w_natural
-            icon_h_mm = target_h_mm
-
-        icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
-        img_x = x_mm + (w_mm - icon_w_mm) / 2.0
-        img_y = y_mm + (h_mm - icon_h_mm) / 2.0
-        pdf.image(icon_to_use, x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
-
     def _draw_flap_right(self, pdf: FPDF, sku_config,
                          x_mm, y_mm, w_mm, h_mm, rotate_180=False):
-        """绘制右侧翻盖面板（up 旋转 180°，down 正常）"""
-        total_boxes = sku_config.box_number['total_boxes']
-        current_box = sku_config.box_number['current_box']
-        icon = self.resources[f'icon_right_{total_boxes}-{current_box}_panel']
 
-        target_h_mm = 100.0
+        icon_path = self.resources['icon_flap_keepboxes']
+
+        with Image.open(icon_path) as _img:
+            icon = _img.convert('RGBA')
+            icon_width, icon_height = icon.size
+        target_h_mm = 70.0
         max_w_mm = w_mm * 0.8
-        icon_w_natural = target_h_mm * icon.width / icon.height
+        icon_w_natural = target_h_mm * icon_width / icon_height
         if icon_w_natural > max_w_mm:
             icon_w_mm = max_w_mm
-            icon_h_mm = icon_w_mm * icon.height / icon.width
+            icon_h_mm = icon_w_mm * icon_height / icon_width
         else:
             icon_w_mm = icon_w_natural
             icon_h_mm = target_h_mm
