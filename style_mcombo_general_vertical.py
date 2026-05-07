@@ -102,12 +102,12 @@ class MComboVerticalStyle(BoxMarkStyle):
             # 静态图标存储为路径，fpdf2 直接接受路径，无需 PIL 预加载
             'icon_trademark':       res_base / '正唛logo.png',
             'icon_company':         res_base / '正唛公司信息.png',
-            'icon_box_number_1':    res_base / '正唛 Box 1.png',
-            'icon_box_number_2':    res_base / '正唛 Box 2.png',
-            'icon_box_number_3':    res_base / '正唛 Box 3.png',
-            'icon_box_number_4':    res_base / '正唛 Box 4.png',
-            'icon_box_number_5':    res_base / '正唛 Box 5.png',
-            'icon_box_number_6':    res_base / '正唛 Box 6.png',
+            # 'icon_box_number_1':    res_base / '正唛 Box 1.png',
+            # 'icon_box_number_2':    res_base / '正唛 Box 2.png',
+            # 'icon_box_number_3':    res_base / '正唛 Box 3.png',
+            # 'icon_box_number_4':    res_base / '正唛 Box 4.png',
+            # 'icon_box_number_5':    res_base / '正唛 Box 5.png',
+            # 'icon_box_number_6':    res_base / '正唛 Box 6.png',
             'icon_side_label_box':  res_base / '侧唛标签框.png',
             'icon_side_logo':       res_base / '侧唛logo.png',
             'icon_side_text_box':   res_base / '侧唛文本框.png',
@@ -421,16 +421,17 @@ class MComboVerticalStyle(BoxMarkStyle):
                   x=x_mm + 10.0, y=company_y,
                   w=icon_company_w_mm, h=icon_company_h_mm)
 
-        current_box = sku_config.box_number['current_box']
-        icon_box = self.resources[f'icon_box_number_{current_box}']
-        box_icon_h_mm = h_right_mm / 4.0
-        with Image.open(icon_box) as _img:
-            _bw, _bh = _img.size
-        box_icon_w_mm = box_icon_h_mm * _bw / _bh
-        box_icon_y = y_mm + h_mm - h_left_mm + (h_left_mm - box_icon_h_mm) / 2.0
-        pdf.image(icon_box,
-                  x=x_mm + 10.0, y=box_icon_y,
-                  w=box_icon_w_mm, h=box_icon_h_mm)
+        # 通用箱唛不用显示箱号，注释掉相关代码
+        # current_box = sku_config.box_number['current_box']
+        # icon_box = self.resources[f'icon_box_number_{current_box}']
+        # box_icon_h_mm = h_right_mm / 4.0
+        # with Image.open(icon_box) as _img:
+        #     _bw, _bh = _img.size
+        # box_icon_w_mm = box_icon_h_mm * _bw / _bh
+        # box_icon_y = y_mm + h_mm - h_left_mm + (h_left_mm - box_icon_h_mm) / 2.0
+        # pdf.image(icon_box,
+        #           x=x_mm + 10.0, y=box_icon_y,
+        #           w=box_icon_w_mm, h=box_icon_h_mm)
 
         sku_text = sku_config.sku_name
         sku_area_left_mm  = 10.0 + icon_company_w_mm + 30.0
