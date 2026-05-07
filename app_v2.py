@@ -39,6 +39,8 @@ from generation_core_v3 import (
 
 # 导入所有样式以自动注册
 import style_mcombo_standard
+import style_mcombo_general_standard
+import style_mcombo_general_vertical
 import style_simple
 # 未来添加更多样式时在这里导入
 

@@ -111,6 +111,7 @@ class MComboVerticalStyle(BoxMarkStyle):
             'icon_side_label_box':  res_base / '侧唛标签框.png',
             'icon_side_logo':       res_base / '侧唛logo.png',
             'icon_side_text_box':   res_base / '侧唛文本框.png',
+            'icon_flap_multibox':    res_base / '顶部-左-多箱.png',
             'icon_flap_keepboxes':  res_base / '通用箱唛-保留盒子.png',
             # 海绵认证图需要颜色处理，保留为 PIL Image
             'icon_side_sponge':     general_functions.make_it_pure_black(
@@ -268,25 +269,33 @@ class MComboVerticalStyle(BoxMarkStyle):
     def _draw_flap(self, pdf: FPDF, sku_config,
                    x_mm, y_mm, w_mm, h_mm, rotate_180=False):
         """绘制翻盖面板，可选择整体旋转 180°。"""
-        icon_path = self.resources['icon_flap_keepboxes']
 
-        with Image.open(icon_path) as _img:
-            icon = _img.convert('RGBA')
-            icon_width, icon_height = icon.size
-        target_h_mm = 70.0
-        max_w_mm = w_mm * 0.8
-        icon_w_natural = target_h_mm * icon_width / icon_height
-        if icon_w_natural > max_w_mm:
-            icon_w_mm = max_w_mm
-            icon_h_mm = icon_w_mm * icon_height / icon_width
+        icon_upper_path = self.resources['icon_flap_multibox']
+        icon_lower_path = self.resources['icon_flap_keepboxes']
+        
+        icon_upper_w_mm = w_mm * 0.8
+        icon_lower_w_mm = w_mm * 0.8
+        
+        icon_upper = LEImage(icon_upper_path, width=icon_upper_w_mm)
+        icon_lower = LEImage(icon_lower_path, width=icon_lower_w_mm)
+
+        col = Column([icon_upper, icon_lower], spacing=20.0, align='center')
+        
+        if rotate_180:
+            cx = x_mm + w_mm / 2.0
+            cy = y_mm + h_mm / 2.0
+            with pdf.rotation(180, cx, cy):
+                col.layout(
+                    x_mm + (w_mm - col.width)  / 2.0,
+                    y_mm + (h_mm - col.height) / 2.0,
+                )
+                col.render(pdf)
         else:
-            icon_w_mm = icon_w_natural
-            icon_h_mm = target_h_mm
-
-        icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
-        img_x = x_mm + (w_mm - icon_w_mm) / 2.0
-        img_y = y_mm + (h_mm - icon_h_mm) / 2.0
-        pdf.image(icon_to_use, x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
+            col.layout(
+                x_mm + (w_mm - col.width)  / 2.0,
+                y_mm + (h_mm - col.height) / 2.0,
+            )
+            col.render(pdf)
 
     def _draw_front_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
         """绘制正面（正唛）面板"""
@@ -308,7 +317,7 @@ class MComboVerticalStyle(BoxMarkStyle):
 
         # ── 2. 颜色标签（右上角，黑色圆角背景 + 金色文字）──────────────────────
         color_text = str(sku_config.color)
-        color_size_px = int(h_mm * px_per_mm * 0.0382)
+        color_size_px = int(w_mm * px_per_mm * 0.0319)
         color_size_pt = color_size_px * 72.0 / ppi
         pil_color = ImageFont.truetype(self.font_paths['Calibri-Bold'], color_size_px)
 
@@ -436,7 +445,7 @@ class MComboVerticalStyle(BoxMarkStyle):
         sku_text = sku_config.sku_name
         sku_area_left_mm  = 10.0 + icon_company_w_mm + 30.0
         sku_area_right_mm = w_mm - 30.0
-        sku_max_w_mm = sku_area_right_mm - sku_area_left_mm
+        sku_max_w_mm = sku_area_right_mm - sku_area_left_mm + 20
         sku_max_h_mm = 80.0
 
         sku_size_pt, pil_sku = self._get_font_size(
@@ -448,7 +457,7 @@ class MComboVerticalStyle(BoxMarkStyle):
                 sku_text, 'Calibri-Bold',
                 sku_max_w_mm * sku_max_h_mm / sku_h_mm, ppi)
 
-        sku_center_x = x_mm + (sku_area_left_mm + sku_area_right_mm) / 2.0
+        sku_center_x = x_mm + (sku_area_left_mm + sku_area_right_mm) / 2.0 + 3
         sku_center_y = y_mm + h_mm - h_right_mm / 2.0 + 3.0
 
         self._draw_text_mid_center(pdf, sku_center_x, sku_center_y,

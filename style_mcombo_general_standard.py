@@ -18,7 +18,7 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
         return "mcombo_general_standard"
 
     def get_style_description(self):
-        return "MCombo 通用箱唛标准样式"
+        return "MCombo 通用箱唛第一箱 箱唛样式"
 
     def get_required_params(self):
         return ['length_cm', 'width_cm', 'height_cm', 'color', 'product',
@@ -108,6 +108,7 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
             'icon_side_label_box':  res_base / '侧唛标签框.png',
             'icon_side_logo':       res_base / '侧唛logo.png',
             'icon_side_text_box':   res_base / '侧唛文本框.png',
+            'icon_flap_multibox':    res_base / '顶部-左-多箱.png',
             'icon_flap_keepboxes':  res_base / '通用箱唛-保留盒子.png',
             # 海绵认证图需要颜色处理，保留为 PIL Image
             'icon_side_sponge':     general_functions.make_it_pure_black(
@@ -162,8 +163,12 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
         # 两块侧面面板
         self._draw_side_panel(pdf, sku_config, x1, y1, w_mm, h_mm)
         self._draw_side_panel(pdf, sku_config, x3, y1, w_mm, h_mm)
+        
+        # 顶盖翻盖：左上侧正常放置；左下侧旋转 180°（匹配原始逻辑）
+        self._draw_flap_left(pdf, sku_config, x0, 0.0, l_mm, half_w_mm, rotate_180=False)
+        self._draw_flap_left(pdf, sku_config, x0, y2,  l_mm, half_w_mm, rotate_180=True)
 
-        # 顶盖翻盖：左侧正常放置；右侧 up 旋转 180°（匹配原始逻辑）
+        # 顶盖翻盖：右下侧正常放置；右上侧旋转 180°（匹配原始逻辑）
         self._draw_flap_right(pdf, sku_config, x2, 0.0, l_mm, half_w_mm, rotate_180=True)
         self._draw_flap_right(pdf, sku_config, x2, y2,  l_mm, half_w_mm, rotate_180=False)
 
@@ -265,6 +270,30 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
         pdf.polygon(curve_pts, style='F')
 
     # ── 面板绘制方法 ────────────────────────────────────────────────────────────
+
+    def _draw_flap_left(self, pdf: FPDF, sku_config,
+                         x_mm, y_mm, w_mm, h_mm, rotate_180=False):
+
+        icon_path = self.resources['icon_flap_multibox']
+
+        with Image.open(icon_path) as _img:
+            icon = _img.convert('RGBA')
+            icon_width, icon_height = icon.size
+        target_h_mm = 100.0
+        max_w_mm = w_mm * 0.8
+        icon_w_natural = target_h_mm * icon_width / icon_height
+        if icon_w_natural > max_w_mm:
+            icon_w_mm = max_w_mm
+            icon_h_mm = icon_w_mm * icon_height / icon_width
+        else:
+            icon_w_mm = icon_w_natural
+            icon_h_mm = target_h_mm
+
+        icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
+        img_x = x_mm + (w_mm - icon_w_mm) / 2.0
+        img_y = y_mm + (h_mm - icon_h_mm) / 2.0
+        pdf.image(icon_to_use, x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
+
 
     def _draw_flap_right(self, pdf: FPDF, sku_config,
                          x_mm, y_mm, w_mm, h_mm, rotate_180=False):
