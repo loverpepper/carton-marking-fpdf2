@@ -69,7 +69,7 @@ class SKUConfig:
                  style_name="mcombo_standard", 
                  bottom_gb_h_cm=10, ppi=300,
                  company_name="NEWACME LLC", contact_info="www.mcombo.com / sale_uk@newacmellc.com",
-                 legal_data=None, legal_3_2=0, legal_3_3=0, legal_3_4=0, legal_3_5=0, legal_3_6=0,
+                 legal_data=None, legal_CE=0, legal_UKCA=0, legal_RoHs=0, legal_WEEE=0, legal_GreenDot=0,
                  show_fsc=0, show_sponge=0,
                  country=None, **style_params):
         """
@@ -105,11 +105,13 @@ class SKUConfig:
         self.company_name = company_name
         self.contact_info = contact_info
         self.legal_data = legal_data
-        self.legal_3_2 = legal_3_2
-        self.legal_3_3 = legal_3_3
-        self.legal_3_4 = legal_3_4
-        self.legal_3_5 = legal_3_5
-        self.legal_3_6 = legal_3_6
+
+        # 新市场法律标识开关（仅保留新字段命名）
+        self.legal_CE = int(float(legal_CE or 0))
+        self.legal_UKCA = int(float(legal_UKCA or 0))
+        self.legal_RoHs = int(float(legal_RoHs or 0))
+        self.legal_WEEE = int(float(legal_WEEE or 0))
+        self.legal_GreenDot = int(float(legal_GreenDot or 0))
         self.show_fsc = show_fsc
         self.show_sponge = show_sponge
 

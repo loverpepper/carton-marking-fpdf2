@@ -88,11 +88,11 @@ TEMPLATE_COLUMNS = [
     ("company_name",              "公司名称",              "NEWACME LLC",                                     "选填。新市场样式用"),
     ("contact_info",              "联系方式",              "www.mcombo.com / sale_uk@newacmellc.com",         "选填。新市场样式用"),
     ("show_fsc",                  "显示FSC标志",           "否",                                              "选填。填 是 或 否"),
-    ("legal_3_2",                 "法律条款3_2",           0,                                                 "选填。0或1"),
-    ("legal_3_3",                 "法律条款3_3",           0,                                                 "选填。0或1"),
-    ("legal_3_4",                 "法律条款3_4",           0,                                                 "选填。0或1"),
-    ("legal_3_5",                 "法律条款3_5",           1,                                                 "选填。0或1"),
-    ("legal_3_6",                 "法律条款3_6",           1,                                                 "选填。0或1"),
+    ("legal_CE",                  "法律条款CE",            0,                                                 "选填。0或1"),
+    ("legal_UKCA",                "法律条款UKCA",          0,                                                 "选填。0或1"),
+    ("legal_RoHs",                "法律条款RoHs",          0,                                                 "选填。0或1"),
+    ("legal_WEEE",                "法律条款WEEE",          1,                                                 "选填。0或1"),
+    ("legal_GreenDot",            "法律条款GreenDot",      1,                                                 "选填。0或1"),
     ("legal_product_name",        "法律标签-产品名",       "Lift Recliner",                                   "选填。新市场专用"),
     ("legal_model",               "法律标签-型号",         "GE-6160-LC001BG-1",                               "选填。新市场专用"),
     ("legal_batch_number",        "法律标签-批次号",       "08429381118265",                                  "选填。新市场专用"),
@@ -327,11 +327,11 @@ def row_to_skuconfig(row: dict, base_dir) -> SKUConfig:
     contact_info = str(get("contact_info", "www.mcombo.com / sale_uk@newacmellc.com")).strip()
 
     show_fsc    = str(get("show_fsc",    "否")).strip() in ("是", "True", "true", "1", "yes", "Yes")
-    legal_3_2 = int(float(get("legal_3_2", 0) or 0))
-    legal_3_3 = int(float(get("legal_3_3", 0) or 0))
-    legal_3_4 = int(float(get("legal_3_4", 0) or 0))
-    legal_3_5 = int(float(get("legal_3_5", 0) or 0))
-    legal_3_6 = int(float(get("legal_3_6", 0) or 0))
+    legal_CE = int(float(get("legal_CE", 0) or 0))
+    legal_UKCA = int(float(get("legal_UKCA", 0) or 0))
+    legal_RoHs = int(float(get("legal_RoHs", 0) or 0))
+    legal_WEEE = int(float(get("legal_WEEE", 0) or 0))
+    legal_GreenDot = int(float(get("legal_GreenDot", 0) or 0))
 
     # 组装 legal_data 字典
     lp     = get("legal_product_name")
@@ -363,11 +363,11 @@ def row_to_skuconfig(row: dict, base_dir) -> SKUConfig:
         company_name=company_name,
         contact_info=contact_info,
         legal_data=legal_data,
-        legal_3_2=legal_3_2,
-        legal_3_3=legal_3_3,
-        legal_3_4=legal_3_4,
-        legal_3_5=legal_3_5,
-        legal_3_6=legal_3_6,
+        legal_CE=legal_CE,
+        legal_UKCA=legal_UKCA,
+        legal_RoHs=legal_RoHs,
+        legal_WEEE=legal_WEEE,
+        legal_GreenDot=legal_GreenDot,
         show_fsc=show_fsc,
         country=country if country else None,
         **style_params
@@ -574,7 +574,7 @@ with tab_single:
             nm_lco   = st.text_input("原产国 Country Origin",          value=origin_text.title())
             nm_lmfr  = st.text_input("制造商 Manufacturer",            value="TAIYUAN TEMARU ELECTRONICS TECHNOLOGY CO,.LTD")
             nm_laddr = st.text_input("制造商地址 Manufacturer Address", value="NO.201-01,Zhongchuang Space, Shanxi TemaruCross-border Industrial Park, 2nd Floor,Customs Clearance Service Center,Taiyuan Wusu")
-            nm_leml  = st.text_input("制造商邮箱 Manufacturer E-mail",  value="")
+            nm_leml  = st.text_input("制造商邮箱 Manufacturer E-mail",  value=nm_contact_info.split("/")[-1].strip())
 
     nm_legal_data = {
         "Product Name":         nm_lp,

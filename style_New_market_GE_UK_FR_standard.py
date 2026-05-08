@@ -647,7 +647,7 @@ class MComboStandardStyle(BoxMarkStyle):
         th = box_h_mm   # alias
 
         # Font sizes (same proportional ratios as fill_sidepanel_text_1)
-        label_size_px   = int(th * px_per_mm * 0.081)
+        label_size_px   = int(th * px_per_mm * 0.075)
         bold_size_px    = int(th * px_per_mm * 0.095)
         barcode_txt_px  = int(th * px_per_mm * 0.058)
 
@@ -662,16 +662,14 @@ class MComboStandardStyle(BoxMarkStyle):
         # G.W./N.W. and BOX SIZE text
         gw  = sku_config.side_text.get('gw_value', '')
         nw  = sku_config.side_text.get('nw_value', '')
-        l_in = getattr(sku_config, 'l_in', sku_config.l_cm / 2.54)
-        w_in = getattr(sku_config, 'w_in', sku_config.w_cm / 2.54)
-        h_in = getattr(sku_config, 'h_in', sku_config.h_cm / 2.54)
-        gw_text  = f"G.W./N.W.: {gw} / {nw} lbs"
-        dim_text = f"BOX SIZE: {l_in:.1f}'' x {w_in:.1f}'' x {h_in:.1f}''"
+
+        gw_text  = f"G.W./N.W.: {gw * 0.453592:.1f} / {nw * 0.453592:.1f} Kg"
+        dim_text = f"BOX SIZE: {sku_config.l_cm:.0f}cm x {sku_config.w_cm:.0f}cm x {sku_config.h_cm:.0f}cm"
 
         text_x = box_x + box_w_mm * 0.55
-        self._draw_text_top_left(pdf, text_x, box_y + th * 0.044,
+        self._draw_text_top_left(pdf, text_x, box_y + th * 0.059,
                                   gw_text, 'ITCDemi', '', label_size_pt, pil_label, ppi)
-        self._draw_text_top_left(pdf, text_x, box_y + th * 0.214,
+        self._draw_text_top_left(pdf, text_x, box_y + th * 0.239,
                                   dim_text, 'ITCDemi', '', label_size_pt, pil_label, ppi)
 
         # Barcode images (still raster — barcode is inherently graphical)
