@@ -316,7 +316,7 @@ if __name__ == "__main__":
         show_fsc=True, # 是否显示FSC标志，适用于新市场
         company_name="NEWACME LLC",
         contact_info="www.mcombo.com / sale_uk@newacmellc.com",
-        legal_3_2=0, legal_3_3=0, legal_3_4=0, legal_3_5=1, legal_3_6=1,
+        legal_CE=0, legal_UKCA=0, legal_RoHs=0, legal_WEEE=1, legal_GreenDot=1,
         country="GE"
     )
     

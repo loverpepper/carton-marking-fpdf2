@@ -52,7 +52,6 @@ class MComboStandardStyle(BoxMarkStyle):
         pdf.add_font('Calibri',     '', self.font_paths['calibri'])
         pdf.add_font('CalibriBold', '', self.font_paths['calibri_bold'])
         pdf.add_font('ITCDemi',     '', self.font_paths['itc_demi'])
-        pdf.add_font('Courier',     '', self.font_paths['courier'])
 
     def draw_to_pdf(self, pdf: FPDF, sku_config):
         """Render all panels as fully-vector fpdf2 output."""
@@ -67,23 +66,23 @@ class MComboStandardStyle(BoxMarkStyle):
         # Front panels (×2) — fully vector
         for key in ('panel_front1', 'panel_front2'):
             x, y, w, h = layout[key]
-            self._draw_front_panel_v(pdf, sku_config, x, y, w, h)
+            self._draw_front_panel(pdf, sku_config, x, y, w, h)
 
         # Side panels — fully vector
         x, y, w, h = layout['panel_side1']
-        self._draw_side_panel_v(pdf, sku_config, x, y, w, h,
-                                show_legal=True, rotate_deg=0)
+        self._draw_side_panel(pdf, sku_config, x, y, w, h,
+                                show_legal=True)
         x, y, w, h = layout['panel_side2']
-        self._draw_side_panel_v(pdf, sku_config, x, y, w, h,
-                                show_legal=False, rotate_deg=0)
+        self._draw_side_panel(pdf, sku_config, x, y, w, h,
+                                show_legal=False)
 
         # Left flaps (icon images)
-        self._draw_flap_left_v(pdf, sku_config, *layout['flap_top_front1'], rotate_180=False)
-        self._draw_flap_left_v(pdf, sku_config, *layout['flap_btm_front1'], rotate_180=True)
+        self._draw_flap_left(pdf, sku_config, *layout['flap_top_front1'], rotate_180=False)
+        self._draw_flap_left(pdf, sku_config, *layout['flap_btm_front1'], rotate_180=True)
 
         # Right flaps
-        self._draw_flap_right_v(pdf, sku_config, *layout['flap_top_front2'], rotate_180=True)
-        self._draw_flap_right_v(pdf, sku_config, *layout['flap_btm_front2'], rotate_180=False)
+        self._draw_flap_right(pdf, sku_config, *layout['flap_top_front2'], rotate_180=True)
+        self._draw_flap_right(pdf, sku_config, *layout['flap_btm_front2'], rotate_180=False)
 
         # Side up/down — blank (already filled with background)
 
@@ -104,30 +103,36 @@ class MComboStandardStyle(BoxMarkStyle):
             'icon_right_4-2_panel': Image.open(self.res_base / '德文-顶部-右-4-2.png').convert('RGBA'),
             'icon_right_4-3_panel': Image.open(self.res_base / '德文-顶部-右-4-3.png').convert('RGBA'),
             'icon_right_4-4_panel': Image.open(self.res_base / '德文-顶部-右-4-4.png').convert('RGBA'),
-            # 'icon_top_box_number_2_2': Image.open(res_base / '顶部-box-2-2.png').convert('RGBA'),
+            
+            
             'icon_top_box_number_3_2': Image.open(self.res_base / '顶部-box-3-2.png').convert('RGBA'),
             'icon_top_box_number_3_3': Image.open(self.res_base / '顶部-box-3-3.png').convert('RGBA'),
-            # 'icon_trademark': Image.open(res_base / '正唛logo.png').convert('RGBA'),
-            # 'icon_company': Image.open(res_base / '正唛公司信息.png').convert('RGBA'),
+            
             'icon_box_number_1': Image.open(self.res_base / '正唛 Box 1.png').convert('RGBA'),
             'icon_box_number_2': Image.open(self.res_base / '正唛 Box 2.png').convert('RGBA'),
             'icon_box_number_3': Image.open(self.res_base / '正唛 Box 3.png').convert('RGBA'),
             'icon_box_number_4': Image.open(self.res_base / '正唛 Box 4.png').convert('RGBA'),
-            # 'icon_side_label_box': Image.open(res_base / '侧唛标签框.png').convert('RGBA'),
-            # 'icon_side_logo': Image.open(res_base / '侧唛logo.png').convert('RGBA'),
+            
+            # 正唛两种logo
+            'icon_front_logo_elegue': Image.open(self.res_base / '正唛logo-ELEGUE.png').convert('RGBA'),
+            'icon_front_logo_mcombo': Image.open(self.res_base / '正唛logo-MCombo.png').convert('RGBA'),
+            
+            # 侧唛右上两种logo
+            'icon_side_logo_elegue': Image.open(self.res_base / '侧唛logo-ELEGUE.png').convert('RGBA'),
+            'icon_side_logo_mcombo': Image.open(self.res_base / '侧唛logo-MCombo.png').convert('RGBA'),
+            
             'icon_side_text_box': general_functions.make_it_pure_black(Image.open(self.res_base / '条码框-去掉竖线.png').convert('RGBA')),
             'icon_side_sponge': Image.open(self.res_base / '海绵认证.png').convert('RGBA'),
             'icon_side_FSC': general_functions.make_it_pure_black(Image.open(self.res_base / 'FSC.png').convert('RGBA')),
             'icon_company_bg_left': general_functions.make_it_pure_black(Image.open(self.res_base / '正唛-公司名称.png').convert('RGBA')),
             'icon_company_bg_right': general_functions.make_it_pure_black(Image.open(self.res_base / '正唛-邮箱.png').convert('RGBA')),
-            # 'legal_icon_2_1': make_it_pure_black(Image.open(res_base / legal_icon).convert('RGBA')),
-            # 'legal_icon_2_2': general_functions.make_it_pure_black(Image.open(res_base / legal_icon).convert('RGBA')),
+            
             'legal_icon_3_1': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-1.png').convert('RGBA')),
-            'legal_icon_3_2': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2CC.png').convert('RGBA')),
-            'legal_icon_3_3': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2CK.png').convert('RGBA')),
-            'legal_icon_3_4': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2RoHs.png').convert('RGBA')),
-            'legal_icon_3_5': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2回收.png').convert('RGBA')),
-            'legal_icon_3_6': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2绿点.png').convert('RGBA')),
+            'legal_icon_CE': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2CC.png').convert('RGBA')),
+            'legal_icon_UKCA': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2CK.png').convert('RGBA')),
+            'legal_icon_RoHs': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2RoHs.png').convert('RGBA')),
+            'legal_icon_WEEE': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2回收.png').convert('RGBA')),
+            'legal_icon_GreenDot': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2绿点.png').convert('RGBA')),
             'legal_icon_4': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-4.png').convert('RGBA')),
         }
 
@@ -139,10 +144,12 @@ class MComboStandardStyle(BoxMarkStyle):
             'calibri_bold': str(font_base / 'calibri-bold.ttf'),
             'itc_demi': str(font_base / 'avantgardelt-demi.ttf'),
             'courier': str(font_base / 'cour.ttf'),
-            'side_font_label': str(font_base / 'avantgardelt-demi.ttf'),
-            'side_font_bold': str(font_base / 'calibri-bold.ttf'),
-            'side_font_barcode': str(font_base / 'calibri_blod.ttf')
         }
+
+        # 兼容旧字段名，避免重复写同一路径
+        self.font_paths['side_font_barcode'] = self.font_paths['calibri_bold']
+        self.font_paths['side_font_label'] = self.font_paths['itc_demi']
+        self.font_paths['side_font_bold'] = self.font_paths['calibri_bold']
 
         # 字体大小相对比例
         self.font_ratios = {
@@ -210,7 +217,7 @@ class MComboStandardStyle(BoxMarkStyle):
 
     # ── vector panel drawing methods ────────────────────────────────────────────
 
-    def _draw_front_panel_v(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm):
+    def _draw_front_panel(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm):
         """Draw the front panel with vector text and raster bottom bar."""
         ppi = sku_config.ppi
         px_per_mm = ppi / 25.4
@@ -234,7 +241,7 @@ class MComboStandardStyle(BoxMarkStyle):
 
         # ── 2. Bottom bar — fully vector ──
         bottom_h_mm = sku_config.bottom_gb_h * 10.0
-        self._draw_bottom_bar_v(pdf, sku_config, x_mm, y_mm, w_mm, h_mm)
+        self._draw_bottom_bar(pdf, sku_config, x_mm, y_mm, w_mm, h_mm)
 
         # ── 3. Color text (right top, black rounded background) ──
         color_text = str(sku_config.color)
@@ -328,7 +335,7 @@ class MComboStandardStyle(BoxMarkStyle):
                                     'CalibriBold', '', size_size_pt,
                                     pil_size, ppi)
 
-    def _draw_flap_left_v(self, pdf, sku_config,
+    def _draw_flap_left(self, pdf, sku_config,
                            x_mm, y_mm, w_mm, h_mm, rotate_180=False):
         """Draw left flap panel with icon (optionally rotated 180°)."""
         total_boxes = sku_config.box_number['total_boxes']
@@ -348,7 +355,7 @@ class MComboStandardStyle(BoxMarkStyle):
         iy = y_mm + (h_mm - icon_h) / 2.0
         pdf.image(icon_to_use, x=ix, y=iy, w=icon_w, h=icon_h)
 
-    def _draw_flap_right_v(self, pdf, sku_config,
+    def _draw_flap_right(self, pdf, sku_config,
                             x_mm, y_mm, w_mm, h_mm, rotate_180=False):
         """Draw right flap panel with icon (optionally rotated 180°)."""
         total_boxes = sku_config.box_number['total_boxes']
@@ -371,7 +378,7 @@ class MComboStandardStyle(BoxMarkStyle):
 
     # ── fully-vector bottom bar ────────────────────────────────────────────────
 
-    def _draw_bottom_bar_v(self, pdf, sku_config, x_mm, y_mm, panel_w_mm, panel_h_mm):
+    def _draw_bottom_bar(self, pdf, sku_config, x_mm, y_mm, panel_w_mm, panel_h_mm):
         """Draw the front-panel bottom bar entirely in fpdf2 (S-curve + vector text)."""
         import textwrap as _tw
         ppi = sku_config.ppi
@@ -490,41 +497,13 @@ class MComboStandardStyle(BoxMarkStyle):
                                    'CalibriBold', '', sku_size_pt, sku_pil, ppi,
                                    color=(161, 142, 102))
 
-    # ── fully-vector side panel ──────────────────────────────────────────────
-
-    def _draw_side_panel_v(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
-                            show_legal, rotate_deg=0):
-        """Draw the side panel entirely in fpdf2 vector text + images."""
-        cx = x_mm + w_mm / 2.0
-        cy = y_mm + h_mm / 2.0
-
-        if rotate_deg == 90:
-            # Vertical style: content is drawn on an effective (h_mm × w_mm) canvas
-            # centred at (cx, cy), then displayed rotated 90° CCW in the PDF.
-            o_x = cx - h_mm / 2.0
-            o_y = cy - w_mm / 2.0
-            eff_w, eff_h = h_mm, w_mm
-            h_left_mm, logo_h_mm = 80.0, 40.0
-        else:
-            o_x, o_y = x_mm, y_mm
-            eff_w, eff_h = w_mm, h_mm
-            h_left_mm, logo_h_mm = 100.0, 50.0
-
-        def _draw():
-            self._draw_side_content_v(pdf, sku_config,
-                                      o_x, o_y, eff_w, eff_h,
-                                      show_legal, h_left_mm, logo_h_mm)
-
-        if rotate_deg == 90:
-            with pdf.rotation(angle=90, x=cx, y=cy):
-                _draw()
-        else:
-            _draw()
-
-    def _draw_side_content_v(self, pdf, sku_config,
+    def _draw_side_panel(self, pdf, sku_config,
                               o_x, o_y, eff_w, eff_h,
-                              show_legal, h_left_mm, logo_h_mm):
+                              # h_left_mm 是侧唛底部黑框高度
+                              # logo_h_mm 是侧唛右上logo高度
+                              show_legal, h_left_mm = 100.0, logo_h_mm = 50.0):
         """Low-level side panel drawing in a given coordinate frame."""
+        
         ppi        = sku_config.ppi
         px_per_mm  = ppi / 25.4
         dpi        = sku_config.dpi
@@ -597,9 +576,11 @@ class MComboStandardStyle(BoxMarkStyle):
                                    color=(161, 142, 102))
 
         # ── 4. Side logo (top-right corner) ──────────────────────────────────
-        logo_file = self._get_logo_file(sku_config)
-        logo_img  = general_functions.make_it_pure_black(
-            Image.open(logo_file).convert('RGBA'))
+        if getattr(sku_config, 'GE', 0) == 1:
+            logo_img = self.resources['icon_side_logo_elegue']
+        elif getattr(sku_config, 'FR', 0) == 1 or getattr(sku_config, 'UK', 0) == 1:
+            logo_img = self.resources['icon_side_logo_mcombo']
+        
         logo_w_mm = logo_h_mm * logo_img.width / logo_img.height
         margin_side_mm = logo_h_mm * 0.6
         logo_x = o_x + eff_w - logo_w_mm - margin_side_mm
@@ -633,7 +614,7 @@ class MComboStandardStyle(BoxMarkStyle):
         raw_box  = self.resources['icon_side_text_box']
         box_w_mm = table_h_mm * raw_box.width / raw_box.height
         pdf.image(raw_box, x=current_x, y=elem_y, w=box_w_mm, h=table_h_mm)
-        self._draw_barcode_box_v(pdf, sku_config,
+        self._draw_barcode_box(pdf, sku_config,
                                  current_x, elem_y, box_w_mm, table_h_mm)
 
         # ── 6. Legal label ────────────────────────────────────────────────────
@@ -655,9 +636,9 @@ class MComboStandardStyle(BoxMarkStyle):
             else:
                 legal_y = panel_bottom - 70.0 - 140.0
 
-            self._draw_legal_v(pdf, sku_config, legal_x, legal_y, legal_icon_2_2)
+            self._draw_legal(pdf, sku_config, legal_x, legal_y, legal_icon_2_2)
 
-    def _draw_barcode_box_v(self, pdf, sku_config,
+    def _draw_barcode_box(self, pdf, sku_config,
                              box_x, box_y, box_w_mm, box_h_mm):
         """Draw the side-panel barcode section as vector text + raster barcodes."""
         ppi       = sku_config.ppi
@@ -742,11 +723,14 @@ class MComboStandardStyle(BoxMarkStyle):
 
         # MADE IN CHINA
         made_y = box_y + th * 0.885
+        
+        # 产地文字
+        origin_text = sku_config.side_text.get('origin_text', 'MADE IN CHINA').upper()
         self._draw_text_top_center(
             pdf, box_x + box_w_mm / 2, made_y,
-            'MADE IN CHINA', 'CalibriBold', '', bold_size_pt, pil_bold, ppi)
+            origin_text, 'CalibriBold', '', bold_size_pt, pil_bold, ppi)
 
-    def _draw_legal_v(self, pdf, sku_config, x_mm, y_mm, legal_icon_2_2):
+    def _draw_legal(self, pdf, sku_config, x_mm, y_mm, legal_icon_2_2):
         """Draw the legal label component entirely in fpdf2 (box, lines, icons, text)."""
         ppi = sku_config.ppi
 
@@ -793,8 +777,9 @@ class MComboStandardStyle(BoxMarkStyle):
 
         # Legal text in row1 left area
         text_area_w = v_line_x_rel - gap_mm / 2
+        
         if sku_config.legal_data:
-            self._draw_legal_text_v(pdf, sku_config,
+            self._draw_legal_text(pdf, sku_config,
                                     x_mm + 7.5, y_mm, text_area_w, row1_h)
 
         # ── Row 2: certification icons (centred) ──────────────────────────────
@@ -805,11 +790,11 @@ class MComboStandardStyle(BoxMarkStyle):
         row2_icons.append((icon_3_1, i31_w, i31_h))
 
         check_list = [
-            (getattr(sku_config, 'legal_3_2', 0), 'legal_icon_3_2'),
-            (getattr(sku_config, 'legal_3_3', 0), 'legal_icon_3_3'),
-            (getattr(sku_config, 'legal_3_4', 0), 'legal_icon_3_4'),
-            (getattr(sku_config, 'legal_3_5', 0), 'legal_icon_3_5'),
-            (getattr(sku_config, 'legal_3_6', 0), 'legal_icon_3_6'),
+            (getattr(sku_config, 'legal_CE', 0), 'legal_icon_CE'),
+            (getattr(sku_config, 'legal_UKCA', 0), 'legal_icon_UKCA'),
+            (getattr(sku_config, 'legal_RoHs', 0), 'legal_icon_RoHs'),
+            (getattr(sku_config, 'legal_WEEE', 0), 'legal_icon_WEEE'),
+            (getattr(sku_config, 'legal_GreenDot', 0), 'legal_icon_GreenDot'),
         ]
         for is_on, key in check_list:
             if is_on == 1:
@@ -838,16 +823,16 @@ class MComboStandardStyle(BoxMarkStyle):
                   y=row3_y + (row3_h - i4_h) / 2,
                   w=i4_w, h=i4_h)
 
-    def _draw_legal_text_v(self, pdf, sku_config, x_mm, y_mm,
+    def _draw_legal_text(self, pdf, sku_config, x_mm, y_mm,
                             area_w_mm, area_h_mm):
         """Render legal key-value data as bold label + regular value in fpdf2."""
         import textwrap as _tw
         ppi       = sku_config.ppi
         px_per_mm = ppi / 25.4
 
-        # Same base sizes as LegalTextGroup (28 px at 300 dpi ≈ 6.7 pt)
-        base_px   = 28
-        line_ratio = 1.3
+        # 调整 legal 文本视觉：整体左上移、字号更大、行距更宽
+        base_px   = 45
+        line_ratio = 1.6
 
         reg_path  = self.font_paths['calibri']
         bold_path = self.font_paths['calibri_bold']
@@ -856,8 +841,8 @@ class MComboStandardStyle(BoxMarkStyle):
             pil_r  = ImageFont.truetype(reg_path,  size_px)
             pil_b  = ImageFont.truetype(bold_path, size_px)
             avg_cw = pil_r.getlength('a') / px_per_mm
-            pad_l  = 30.0 / px_per_mm        # 30 px → mm (left padding)
-            pad_r  = 35.0 / px_per_mm
+            pad_l  = 20.0 / px_per_mm        # 24 px → mm (left padding)
+            pad_r  = 24.0 / px_per_mm
             avail  = area_w_mm - pad_l - pad_r
             climit = max(1, int(avail / avg_cw))
             lines  = []
@@ -889,9 +874,10 @@ class MComboStandardStyle(BoxMarkStyle):
         pil_b    = ImageFont.truetype(bold_path, cur_px)
 
         total_h   = len(lines) * line_h
-        extra_y   = 0.2 * 25.4     # ~0.2 cm downward offset (matches LegalTextGroup)
-        curr_y    = y_mm + (area_h_mm - total_h) / 2 + extra_y
-        curr_x    = x_mm + pad_l
+        up_shift_mm = -1.0
+        left_shift_mm = 4.0
+        curr_y    = y_mm + (area_h_mm - total_h) / 2 - up_shift_mm
+        curr_x    = x_mm + max(0.0, pad_l - left_shift_mm)
 
         for ln in lines:
             if ln['is_first'] and ln['label']:

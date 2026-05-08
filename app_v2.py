@@ -487,7 +487,7 @@ with tab_single:
         st.subheader("🏷️ 产品信息")
         color = st.text_input("颜色 color", value="Beige",
                               help="例如: Beige, Brown, Seafoam Green")
-        size  = st.text_input("尺寸标注 size", value="(Oversize)",
+        size  = st.text_input("尺寸标注 size （留空请输入空格）", value="(Oversize)",
                               help="例如: (Oversize), (Medium-Wide)")
         product = st.text_input("产品名称 product 【多行用 \\n 分隔】", value="Lift Recliner",
                                 help="例如: Lift Recliner, Rectangle Trampoline")
@@ -504,12 +504,12 @@ with tab_single:
     # ── 列 2：侧唛信息 ──
     with sp_col2:
         st.subheader("📦 侧唛信息")
-        gross_weight = st.number_input("毛重 gw (lbs)", min_value=0.0, value=106.9, step=0.1)
-        net_weight   = st.number_input("净重 nw (lbs)", min_value=0.0, value=94.4,  step=0.1)
-        sn_code      = st.text_input("SN 条形码", value="08429381073953",
+        gross_weight = st.number_input("毛重 (lbs)", min_value=0.0, value=106.9, step=0.1)
+        net_weight   = st.number_input("净重 (lbs)", min_value=0.0, value=94.4,  step=0.1)
+        st.caption(f"⚖️ 换算千克：毛重 {gross_weight * 0.453592:.1f} kg / 净重 {net_weight * 0.453592:.1f} kg")
+        sn_code      = st.text_input("SN 条形码（NPC码）", value="08429381073953",
                                      help="条形码序列号")
         origin_text  = st.text_input("原产地文字", value="MADE IN CHINA")
-        st.caption(f"📐 箱尺寸英寸（自动）: {_l_in}'' × {_w_in}'' × {_h_in}''")
         style_params['side_text'] = {
             'gw_value':       gross_weight,
             'nw_value':       net_weight,
@@ -551,7 +551,7 @@ with tab_single:
 
         with nm_col1:
             st.subheader("🏢 公司信息")
-            nm_country      = st.selectbox("市场/国家 country", options=["", "GE", "UK", "FR"], index=0,
+            nm_country      = st.selectbox("市场/国家 country", options=["UK", "FR", "GE"], index=0,
                                            help="选择目标市场，留空则不启用国家开关")
             nm_company_name = st.text_input("公司名称 company_name", value="NEWACME LLC")
             nm_contact_info = st.text_input("联系方式 contact_info",
@@ -560,20 +560,20 @@ with tab_single:
 
         with nm_col2:
             st.subheader("📋 法律条款开关")
-            nm_legal_3_2 = int(st.checkbox("legal_3_2", value=False))
-            nm_legal_3_3 = int(st.checkbox("legal_3_3", value=False))
-            nm_legal_3_4 = int(st.checkbox("legal_3_4", value=False))
-            nm_legal_3_5 = int(st.checkbox("legal_3_5", value=True))
-            nm_legal_3_6 = int(st.checkbox("legal_3_6", value=True))
+            nm_legal_CE = int(st.checkbox("legal_CE", value=False))
+            nm_legal_UKCA = int(st.checkbox("legal_UKCA", value=False))
+            nm_legal_RoHs = int(st.checkbox("legal_RoHs", value=False))
+            nm_legal_WEEE = int(st.checkbox("legal_WEEE", value=True))
+            nm_legal_GreenDot = int(st.checkbox("legal_GreenDot", value=True))
 
         with nm_col3:
             st.subheader("🏷️ 法律标签信息 legal_data")
-            nm_lp    = st.text_input("产品名 Product Name",           value="Lift Recliner")
-            nm_lm    = st.text_input("型号 Model",                     value="")
-            nm_lb    = st.text_input("批次号 Batch Number",            value="")
-            nm_lco   = st.text_input("原产国 Country Origin",          value="Made in China")
-            nm_lmfr  = st.text_input("制造商 Manufacturer",            value="")
-            nm_laddr = st.text_input("制造商地址 Manufacturer Address", value="")
+            nm_lp    = st.text_input("产品名 Product Name",           value=product)
+            nm_lm    = st.text_input("型号 Model",                     value=sku_name)
+            nm_lb    = st.text_input("批次号 Batch Number",            value=sn_code)
+            nm_lco   = st.text_input("原产国 Country Origin",          value=origin_text.title())
+            nm_lmfr  = st.text_input("制造商 Manufacturer",            value="TAIYUAN TEMARU ELECTRONICS TECHNOLOGY CO,.LTD")
+            nm_laddr = st.text_input("制造商地址 Manufacturer Address", value="NO.201-01,Zhongchuang Space, Shanxi TemaruCross-border Industrial Park, 2nd Floor,Customs Clearance Service Center,Taiyuan Wusu")
             nm_leml  = st.text_input("制造商邮箱 Manufacturer E-mail",  value="")
 
     nm_legal_data = {
@@ -625,11 +625,11 @@ with tab_single:
                     company_name=nm_company_name,
                     contact_info=nm_contact_info,
                     legal_data=nm_legal_data,
-                    legal_3_2=nm_legal_3_2,
-                    legal_3_3=nm_legal_3_3,
-                    legal_3_4=nm_legal_3_4,
-                    legal_3_5=nm_legal_3_5,
-                    legal_3_6=nm_legal_3_6,
+                    legal_CE=nm_legal_CE,
+                    legal_UKCA=nm_legal_UKCA,
+                    legal_RoHs=nm_legal_RoHs,
+                    legal_WEEE=nm_legal_WEEE,
+                    legal_GreenDot=nm_legal_GreenDot,
                     show_fsc=nm_show_fsc,
                     country=nm_country if nm_country else None,
                     **style_params
