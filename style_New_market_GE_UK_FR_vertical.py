@@ -618,7 +618,6 @@ class MComboStandardStyle(BoxMarkStyle):
                   w=logo_w_mm, h=logo_h_mm)
 
         table_h_mm     = 80.0
-        bottom_gb_h_mm = sku_config.bottom_gb_h * 10.0
         gap_above_mm   = 20.0 if h_left_mm >= 100.0 else 10.0
         elem_y   = panel_bottom - h_left_mm - gap_above_mm - table_h_mm
         gap_mm   = 3.0
@@ -657,7 +656,7 @@ class MComboStandardStyle(BoxMarkStyle):
 
             base_legal_w_mm = 224.0
             base_legal_h_mm = 140.0
-            right_margin_mm = 20.0
+            right_margin_mm = 30.0
 
             scaled_legal_h_mm = min(
                 140.0,
@@ -668,7 +667,11 @@ class MComboStandardStyle(BoxMarkStyle):
             scaled_legal_w_mm = base_legal_w_mm * legal_scale
 
             legal_x = o_x + eff_w - scaled_legal_w_mm - right_margin_mm
-            legal_y = panel_bottom - h_left_mm - gap_above_mm - scaled_legal_h_mm
+            
+            if legal_x > abs_x4:
+                legal_y = panel_bottom - h_left_mm - gap_above_mm - scaled_legal_h_mm + 30
+            else: 
+                legal_y = panel_bottom - h_left_mm - gap_above_mm - scaled_legal_h_mm
 
             pdf.image(legal_img, x=legal_x, y=legal_y,
                       w=scaled_legal_w_mm, h=scaled_legal_h_mm)
