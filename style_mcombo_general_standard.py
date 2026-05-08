@@ -110,6 +110,7 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
             'icon_side_text_box':   res_base / '侧唛文本框.png',
             'icon_flap_multibox':    res_base / '顶部-左-多箱.png',
             'icon_flap_keepboxes':  res_base / '通用箱唛-保留盒子.png',
+            'icon_flap_over70lbs':  res_base / '通用箱唛-超70lbs.png',
             # 海绵认证图需要颜色处理，保留为 PIL Image
             'icon_side_sponge':     general_functions.make_it_pure_black(
                                         Image.open(res_base / '海绵认证.png').convert('RGBA')),
@@ -298,26 +299,43 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
     def _draw_flap_right(self, pdf: FPDF, sku_config,
                          x_mm, y_mm, w_mm, h_mm, rotate_180=False):
 
-        icon_path = self.resources['icon_flap_keepboxes']
+        icon_keepboxes_path = self.resources['icon_flap_keepboxes']
+        icon_over70lbs_path = self.resources['icon_flap_over70lbs']
 
-        with Image.open(icon_path) as _img:
-            icon = _img.convert('RGBA')
-            icon_width, icon_height = icon.size
-        target_h_mm = 70.0
-        max_w_mm = w_mm * 0.8
-        icon_w_natural = target_h_mm * icon_width / icon_height
-        if icon_w_natural > max_w_mm:
-            icon_w_mm = max_w_mm
-            icon_h_mm = icon_w_mm * icon_height / icon_width
+        # 根据毛重条件动态决定宽度和包含的元素
+        if sku_config.side_text['gw_value'] > 70:
+            # 两个图标并排显示
+            icon_keepboxes_width = w_mm * 0.43
+            icon_over70lbs_width = w_mm * 0.27
+            elements = [
+                engine.Image(icon_keepboxes_path, width=icon_keepboxes_width),
+                engine.Image(icon_over70lbs_path, width=icon_over70lbs_width)
+            ]
         else:
-            icon_w_mm = icon_w_natural
-            icon_h_mm = target_h_mm
-
-        icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
-        img_x = x_mm + (w_mm - icon_w_mm) / 2.0
-        img_y = y_mm + (h_mm - icon_h_mm) / 2.0
-        pdf.image(icon_to_use, x=img_x, y=img_y, w=icon_w_mm, h=icon_h_mm)
-
+            # 只有 keepboxes，增大其宽度至 80%
+            icon_keepboxes_width = w_mm * 0.65
+            elements = [engine.Image(icon_keepboxes_path, width=icon_keepboxes_width)]
+        
+        row = engine.Row(
+            elements,
+            spacing = 20,
+            align = 'center',
+            justify= 'center',
+            fixed_height=h_mm,
+            fixed_width=w_mm,
+        )
+        
+        row.layout(x_mm, y_mm)
+        
+        if rotate_180:
+            cx = x_mm + w_mm / 2.0
+            cy = y_mm + h_mm / 2.0
+            
+            with pdf.rotation(180, cx, cy):
+                row.render(pdf)
+        else:
+            row.render(pdf)
+        
     def _draw_front_panel(self, pdf: FPDF, sku_config, x_mm, y_mm, w_mm, h_mm):
         """绘制正面（正唛）面板"""
         ppi = sku_config.ppi
