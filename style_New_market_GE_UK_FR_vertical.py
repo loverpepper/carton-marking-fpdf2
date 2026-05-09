@@ -658,20 +658,26 @@ class MComboStandardStyle(BoxMarkStyle):
             base_legal_h_mm = 140.0
             right_margin_mm = 30.0
 
+            legal_right_x = o_x + eff_w - right_margin_mm
+            legal_left_limit_x = current_x + box_w_mm
+            available_legal_w_mm = max(1.0, legal_right_x - legal_left_limit_x) - 3
+            legal_h_by_w_mm = available_legal_w_mm * base_legal_h_mm / base_legal_w_mm
+
+            legal_top_limit_y = o_y + margin_side_mm + logo_h_mm
+            legal_bottom_limit_y = panel_bottom - h_left_mm - gap_above_mm
+            available_legal_h_mm = max(1.0, legal_bottom_limit_y - legal_top_limit_y) * 0.85
+
             scaled_legal_h_mm = min(
-                140.0,
+                base_legal_h_mm,
                 # 当左侧高度较小时，适当压缩法律标高度以保持整体平衡（不超过中间剩余空间的85%）
-                (eff_h - margin_side_mm - logo_h_mm - gap_above_mm - h_left_mm) * 0.85
+                legal_h_by_w_mm,
+                available_legal_h_mm
             )
             legal_scale = scaled_legal_h_mm / base_legal_h_mm
             scaled_legal_w_mm = base_legal_w_mm * legal_scale
 
-            legal_x = o_x + eff_w - scaled_legal_w_mm - right_margin_mm
-            
-            if legal_x > abs_x4:
-                legal_y = panel_bottom - h_left_mm - gap_above_mm - scaled_legal_h_mm + 30
-            else: 
-                legal_y = panel_bottom - h_left_mm - gap_above_mm - scaled_legal_h_mm
+            legal_x = legal_right_x - scaled_legal_w_mm
+            legal_y = legal_bottom_limit_y - scaled_legal_h_mm
 
             pdf.image(legal_img, x=legal_x, y=legal_y,
                       w=scaled_legal_w_mm, h=scaled_legal_h_mm)
@@ -756,8 +762,9 @@ class MComboStandardStyle(BoxMarkStyle):
 
     def _draw_legal(self, sku_config, legal_icon_2_2):
         """Build legal label as a PIL image, then paste it in side panel."""
-        ppi = sku_config.ppi
+        ppi = 600
         px_per_mm = ppi / 25.4
+        render_scale = ppi / 150.0
 
         box_w_mm = 224.0
         box_h_mm = 140.0
@@ -774,8 +781,8 @@ class MComboStandardStyle(BoxMarkStyle):
         canvas = Image.new('RGBA', (box_w_px, box_h_px), (255, 255, 255, 0))
         draw = ImageDraw.Draw(canvas)
 
-        lw_thin_px = 3
-        lw_thick_px = 4
+        lw_thin_px = max(1, int(round(3 * render_scale)))
+        lw_thick_px = max(1, int(round(4 * render_scale)))
         draw.rectangle((0, 0, box_w_px - 1, box_h_px - 1), outline=(0, 0, 0, 255), width=lw_thick_px)
         draw.line((0, row1_h_px, box_w_px, row1_h_px), fill=(0, 0, 0, 255), width=lw_thin_px)
         draw.line((0, row1_h_px + row2_h_px, box_w_px, row1_h_px + row2_h_px),
@@ -801,7 +808,10 @@ class MComboStandardStyle(BoxMarkStyle):
         if sku_config.legal_data:
             text_x_px = max(0, int(round(7.5 * px_per_mm)))
             text_area_w_px = max(1, v_line_x - gap_px // 2 - text_x_px)
-            self._draw_legal_text(draw, sku_config, text_x_px, 0, text_area_w_px, row1_h_px)
+            self._draw_legal_text(
+                draw, sku_config, text_x_px, 0, text_area_w_px, row1_h_px,
+                render_scale
+            )
 
         row2_icons = []
         icon_3_1 = self.resources['legal_icon_3_1']
@@ -845,12 +855,12 @@ class MComboStandardStyle(BoxMarkStyle):
         return canvas
 
     def _draw_legal_text(self, draw, sku_config, x_px, y_px,
-                         area_w_px, area_h_px):
+                         area_w_px, area_h_px, render_scale=1.0):
         """Render legal key-value text directly onto a PIL canvas."""
         import textwrap as _tw
-        base_px   = 45
-        min_px    = 8
-        step_px   = 2
+        base_px   = max(1, int(round(45 * render_scale)))
+        min_px    = max(1, int(round(8 * render_scale)))
+        step_px   = max(1, int(round(2 * render_scale)))
         line_ratio = 1.6
         reg_path   = self.font_paths['calibri']
         bold_path  = self.font_paths['calibri_bold']
@@ -860,8 +870,8 @@ class MComboStandardStyle(BoxMarkStyle):
             pil_r  = ImageFont.truetype(reg_path,  size_px)
             pil_b  = ImageFont.truetype(bold_path, size_px)
             avg_cw = max(1.0, pil_r.getlength('a'))
-            pad_l  = 20.0
-            pad_r  = 24.0
+            pad_l  = 20.0 * render_scale
+            pad_r  = 24.0 * render_scale
             avail  = max(1.0, area_w_px - pad_l - pad_r)
             climit = max(1, int(avail / avg_cw))
             lines  = []
@@ -881,7 +891,7 @@ class MComboStandardStyle(BoxMarkStyle):
         while cur_px > min_px:
             lines, cur_px, pad_l = _build_lines(cur_px)
             line_h = cur_px * line_ratio
-            if len(lines) * line_h <= (area_h_px - 5.0):
+            if len(lines) * line_h <= (area_h_px - 5.0 * render_scale):
                 break
             cur_px -= step_px
 
@@ -891,8 +901,8 @@ class MComboStandardStyle(BoxMarkStyle):
         pil_b    = ImageFont.truetype(bold_path, cur_px)
 
         total_h   = len(lines) * line_h
-        up_shift_px = -1.0
-        left_shift_px = 4.0
+        up_shift_px = -1.0 * render_scale
+        left_shift_px = 4.0 * render_scale
         curr_y    = y_px + (area_h_px - total_h) / 2 - up_shift_px
         curr_x    = x_px + max(0.0, pad_l - left_shift_px)
 
