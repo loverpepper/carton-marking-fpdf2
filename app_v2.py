@@ -522,7 +522,7 @@ with tab_single:
     with sp_col3:
         st.subheader("⚙️ 其他选项")
         sponge_verified = st.selectbox("海绵认证 sponge_verified",
-                                       options=["否", "是"], index=0) == "是"
+                                       options=["否", "是"], index=1) == "是"
         style_params['sponge_verified'] = sponge_verified
 
         st.markdown("**线描图**（Barberpub 对开盖和 Exacme双圈埋地蹦床专用背景）")
@@ -556,7 +556,7 @@ with tab_single:
             nm_company_name = st.text_input("公司名称 company_name", value="NEWACME LLC")
             nm_contact_info = st.text_input("联系方式 contact_info",
                                             value="www.mcombo.com / sale_uk@newacmellc.com")
-            nm_show_fsc    = st.selectbox("显示FSC标志 show_fsc",    options=["否", "是"], index=0) == "是"
+            nm_show_fsc    = st.selectbox("显示FSC标志 show_fsc",    options=["否", "是"], index=1) == "是"
 
         with nm_col2:
             st.subheader("📋 法律条款开关")
@@ -786,13 +786,13 @@ with tab_batch:
 
                 st.markdown("---")
 
-                # ── 批量生成按钮 ──
-                batch_ppi = st.selectbox(
-                    "批量生成分辨率 (PPI)",
-                    options=[72, 150, 300], index=1,
-                    help="覆盖Excel中ppi列的值（如Excel中有值则以Excel为准）",
-                    key="batch_ppi"
-                )
+                # # ── 批量生成按钮 ──
+                # batch_ppi = st.selectbox(
+                #     "批量生成分辨率 (PPI) （仅对Excel中ppi列为空的行生效）",
+                #     options=[72, 150, 300], index=1,
+                #     help="覆盖Excel中ppi列的值（如Excel中有值则以Excel为准）",
+                #     key="batch_ppi"
+                # )
 
                 col_gen, col_dl = st.columns([1, 1])
                 with col_gen:

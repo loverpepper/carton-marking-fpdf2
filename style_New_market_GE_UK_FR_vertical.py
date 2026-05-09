@@ -3,7 +3,7 @@
 MCombo 标准样式 - 将原有的 BoxMarkEngine 转换为样式类
 """
 from fpdf import FPDF
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageFont
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
 
@@ -652,8 +652,6 @@ class MComboStandardStyle(BoxMarkStyle):
             legal_icon_2_2 = general_functions.make_it_pure_black(
                 Image.open(legal_icon_file).convert('RGBA'))
 
-            legal_img = self._draw_legal(sku_config, legal_icon_2_2)
-
             base_legal_w_mm = 224.0
             base_legal_h_mm = 140.0
             right_margin_mm = 30.0
@@ -679,8 +677,11 @@ class MComboStandardStyle(BoxMarkStyle):
             legal_x = legal_right_x - scaled_legal_w_mm
             legal_y = legal_bottom_limit_y - scaled_legal_h_mm
 
-            pdf.image(legal_img, x=legal_x, y=legal_y,
-                      w=scaled_legal_w_mm, h=scaled_legal_h_mm)
+            self._draw_legal(
+                pdf, sku_config, legal_x, legal_y,
+                scaled_legal_w_mm, scaled_legal_h_mm,
+                legal_icon_2_2
+            )
 
     def _draw_barcode_box(self, pdf, sku_config,
                             box_x, box_y, box_w_mm, box_h_mm):
@@ -760,63 +761,66 @@ class MComboStandardStyle(BoxMarkStyle):
             pdf, box_x + box_w_mm / 2, made_y,
             origin_text, 'CalibriBold', '', bold_size_pt, pil_bold, ppi)
 
-    def _draw_legal(self, sku_config, legal_icon_2_2):
-        """Build legal label as a PIL image, then paste it in side panel."""
-        ppi = 600
-        px_per_mm = ppi / 25.4
-        render_scale = ppi / 150.0
+    def _draw_legal(self, pdf, sku_config, x_mm, y_mm,
+                    box_w_mm, box_h_mm, legal_icon_2_2):
+        """Draw the legal label as fpdf2 vectors at the calculated size."""
+        design_ppi = float(sku_config.ppi)
+        base_w_mm = 224.0
+        base_h_mm = 140.0
+        sx = box_w_mm / base_w_mm
+        sy = box_h_mm / base_h_mm
+        scale = min(sx, sy)
 
-        box_w_mm = 224.0
-        box_h_mm = 140.0
-        row1_h_mm = 57.0
-        row2_h_mm = 20.0
-        row3_h_mm = 63.0
+        row1_h = 57.0 * sy
+        row2_h = 20.0 * sy
+        row3_h = box_h_mm - row1_h - row2_h
 
-        box_w_px = max(1, int(round(box_w_mm * px_per_mm)))
-        box_h_px = max(1, int(round(box_h_mm * px_per_mm)))
-        row1_h_px = max(1, int(round(row1_h_mm * px_per_mm)))
-        row2_h_px = max(1, int(round(row2_h_mm * px_per_mm)))
-        row3_h_px = max(1, int(round(row3_h_mm * px_per_mm)))
+        lw_thin = max(0.12, 5.0 * 25.4 / design_ppi * scale)
+        lw_thick = max(0.16, 7.0 * 25.4 / design_ppi * scale)
 
-        canvas = Image.new('RGBA', (box_w_px, box_h_px), (255, 255, 255, 0))
-        draw = ImageDraw.Draw(canvas)
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(lw_thick)
+        pdf.rect(x_mm, y_mm, box_w_mm, box_h_mm, style='D')
 
-        lw_thin_px = max(1, int(round(3 * render_scale)))
-        lw_thick_px = max(1, int(round(4 * render_scale)))
-        draw.rectangle((0, 0, box_w_px - 1, box_h_px - 1), outline=(0, 0, 0, 255), width=lw_thick_px)
-        draw.line((0, row1_h_px, box_w_px, row1_h_px), fill=(0, 0, 0, 255), width=lw_thin_px)
-        draw.line((0, row1_h_px + row2_h_px, box_w_px, row1_h_px + row2_h_px),
-                  fill=(0, 0, 0, 255), width=lw_thin_px)
+        pdf.set_line_width(lw_thin)
+        pdf.line(x_mm, y_mm + row1_h, x_mm + box_w_mm, y_mm + row1_h)
+        pdf.line(x_mm, y_mm + row1_h + row2_h,
+                 x_mm + box_w_mm, y_mm + row1_h + row2_h)
 
         scale_r1 = 0.85
         if getattr(sku_config, 'GE', 0) == 1:
             scale_r1 = scale_r1 / 2 - 0.15
 
-        icon_r1_h_px = max(1, int(round(row1_h_px * scale_r1)))
-        icon_r1_w_px = max(1, int(round(icon_r1_h_px * legal_icon_2_2.width / legal_icon_2_2.height)))
-        margin_right_px = max(1, int(round(8.0 * px_per_mm)))
-        gap_px = max(1, int(round(10.0 * px_per_mm)))
+        icon_r1_h = row1_h * scale_r1
+        icon_r1_w = icon_r1_h * legal_icon_2_2.width / legal_icon_2_2.height
+        margin_right_mm = 8.0 * sx
+        gap_mm = 10.0 * sx
+        v_line_x_rel = box_w_mm - margin_right_mm - icon_r1_w - gap_mm / 2.0
+        abs_v_line_x = x_mm + v_line_x_rel
 
-        v_line_x = box_w_px - margin_right_px - icon_r1_w_px - gap_px // 2
-        draw.line((v_line_x, 0, v_line_x, row1_h_px), fill=(0, 0, 0, 255), width=lw_thin_px)
+        pdf.line(abs_v_line_x, y_mm, abs_v_line_x, y_mm + row1_h)
 
-        icon_r1 = legal_icon_2_2.resize((icon_r1_w_px, icon_r1_h_px), Image.Resampling.LANCZOS)
-        icon_r1_x = box_w_px - margin_right_px - icon_r1_w_px
-        icon_r1_y = (row1_h_px - icon_r1_h_px) // 2
-        canvas.paste(icon_r1, (icon_r1_x, icon_r1_y), icon_r1)
+        icon_r1_x = x_mm + box_w_mm - margin_right_mm - icon_r1_w
+        icon_r1_y = y_mm + (row1_h - icon_r1_h) / 2.0
+        pdf.image(legal_icon_2_2, x=icon_r1_x, y=icon_r1_y,
+                  w=icon_r1_w, h=icon_r1_h)
 
         if sku_config.legal_data:
-            text_x_px = max(0, int(round(7.5 * px_per_mm)))
-            text_area_w_px = max(1, v_line_x - gap_px // 2 - text_x_px)
+            text_left_mm = 5.5 * sx
+            text_top_adjust_mm = 0.8 * sy
+            text_x = x_mm + text_left_mm
+            text_y = y_mm + text_top_adjust_mm
+            text_right_padding_mm = 2.0 * sx
+            text_area_w = max(1.0, v_line_x_rel - text_left_mm - text_right_padding_mm)
             self._draw_legal_text(
-                draw, sku_config, text_x_px, 0, text_area_w_px, row1_h_px,
-                render_scale
+                pdf, sku_config, text_x, text_y,
+                text_area_w, row1_h, scale
             )
 
         row2_icons = []
         icon_3_1 = self.resources['legal_icon_3_1']
-        i31_h = max(1, int(round(row2_h_px * 0.85)))
-        i31_w = max(1, int(round(i31_h * icon_3_1.width / icon_3_1.height)))
+        i31_h = row2_h * 0.85
+        i31_w = i31_h * icon_3_1.width / icon_3_1.height
         row2_icons.append((icon_3_1, i31_w, i31_h))
 
         check_list = [
@@ -829,90 +833,139 @@ class MComboStandardStyle(BoxMarkStyle):
         for is_on, key in check_list:
             if is_on == 1:
                 img = self.resources[key]
-                ih = max(1, int(round(row2_h_px * 0.4)))
-                iw = max(1, int(round(ih * img.width / img.height)))
+                ih = row2_h * 0.4
+                iw = ih * img.width / img.height
                 row2_icons.append((img, iw, ih))
 
-        icon_gap_px = max(1, int(round(7.0 * px_per_mm)))
-        total_w = sum(iw for _, iw, _ in row2_icons) + icon_gap_px * (len(row2_icons) - 1)
-        cur_x = (box_w_px - total_w) // 2
-        row2_y = row1_h_px
+        icon_gap_mm = 7.0 * sx
+        total_w = sum(iw for _, iw, _ in row2_icons) + icon_gap_mm * (len(row2_icons) - 1)
+        cur_x = x_mm + (box_w_mm - total_w) / 2.0
+        row2_y = y_mm + row1_h
         for img, iw, ih in row2_icons:
-            resized = img.resize((iw, ih), Image.Resampling.LANCZOS)
-            y = row2_y + (row2_h_px - ih) // 2
-            canvas.paste(resized, (cur_x, y), resized)
-            cur_x += iw + icon_gap_px
+            iy = row2_y + (row2_h - ih) / 2.0
+            pdf.image(img, x=cur_x, y=iy, w=iw, h=ih)
+            cur_x += iw + icon_gap_mm
 
         icon_4 = self.resources['legal_icon_4']
-        i4_h = max(1, int(round(row3_h_px * 0.85)))
-        i4_w = max(1, int(round(i4_h * icon_4.width / icon_4.height)))
-        row3_y = row1_h_px + row2_h_px
-        i4_x = (box_w_px - i4_w) // 2
-        i4_y = row3_y + (row3_h_px - i4_h) // 2
-        icon_4_img = icon_4.resize((i4_w, i4_h), Image.Resampling.LANCZOS)
-        canvas.paste(icon_4_img, (i4_x, i4_y), icon_4_img)
+        i4_h = row3_h * 0.85
+        i4_w = i4_h * icon_4.width / icon_4.height
+        row3_y = y_mm + row1_h + row2_h
+        pdf.image(icon_4,
+                  x=x_mm + (box_w_mm - i4_w) / 2.0,
+                  y=row3_y + (row3_h - i4_h) / 2.0,
+                  w=i4_w, h=i4_h)
 
-        return canvas
-
-    def _draw_legal_text(self, draw, sku_config, x_px, y_px,
-                         area_w_px, area_h_px, render_scale=1.0):
-        """Render legal key-value text directly onto a PIL canvas."""
-        import textwrap as _tw
-        base_px   = max(1, int(round(45 * render_scale)))
-        min_px    = max(1, int(round(8 * render_scale)))
-        step_px   = max(1, int(round(2 * render_scale)))
+    def _draw_legal_text(self, pdf, sku_config, x_mm, y_mm,
+                         area_w_mm, area_h_mm, scale=1.0):
+        """Render legal text as fpdf2 text, shrinking to fit the scaled row."""
+        design_ppi = float(sku_config.ppi)
+        px_per_mm = design_ppi / 25.4
+        base_px = max(1, int(round(50 * scale)))
+        min_px = max(4, int(round(8 * scale)))
+        step_px = max(1, int(round(2 * scale)))
         line_ratio = 1.6
-        reg_path   = self.font_paths['calibri']
-        bold_path  = self.font_paths['calibri_bold']
+        reg_path = self.font_paths['calibri']
+        bold_path = self.font_paths['calibri_bold']
 
         def _build_lines(size_px):
             size_px = max(1, int(size_px))
-            pil_r  = ImageFont.truetype(reg_path,  size_px)
-            pil_b  = ImageFont.truetype(bold_path, size_px)
-            avg_cw = max(1.0, pil_r.getlength('a'))
-            pad_l  = 20.0 * render_scale
-            pad_r  = 24.0 * render_scale
-            avail  = max(1.0, area_w_px - pad_l - pad_r)
-            climit = max(1, int(avail / avg_cw))
-            lines  = []
+            pil_r = ImageFont.truetype(reg_path, size_px)
+            pil_b = ImageFont.truetype(bold_path, size_px)
+            pad_l = 20.0 / px_per_mm * scale
+            pad_r = 24.0 / px_per_mm * scale
+            avail = max(1.0, area_w_mm - pad_l - pad_r)
+
+            def _width_mm(text, font=pil_r):
+                return font.getlength(text) / px_per_mm
+
+            def _wrap_by_width(text, first_limit_mm, next_limit_mm):
+                words = str(text).split()
+                if not words:
+                    return ['']
+
+                wrapped = []
+                current = ''
+                limit_mm = max(1.0, first_limit_mm)
+
+                for word in words:
+                    candidate = word if not current else f'{current} {word}'
+                    if _width_mm(candidate) <= limit_mm:
+                        current = candidate
+                        continue
+
+                    if current:
+                        wrapped.append(current)
+                        current = ''
+                        limit_mm = max(1.0, next_limit_mm)
+
+                    if _width_mm(word) <= limit_mm:
+                        current = word
+                        continue
+
+                    chunk = ''
+                    for ch in word:
+                        candidate = chunk + ch
+                        if chunk and _width_mm(candidate) > limit_mm:
+                            wrapped.append(chunk)
+                            limit_mm = max(1.0, next_limit_mm)
+                            chunk = ch
+                        else:
+                            chunk = candidate
+                    current = chunk
+
+                if current:
+                    wrapped.append(current)
+                return wrapped
+
+            lines = []
             for label, value in sku_config.legal_data.items():
                 full_label = f'{label}: '
-                lbl_w_px   = pil_b.getlength(full_label)
-                wrapped    = _tw.wrap(full_label + str(value), width=climit)
+                lbl_w_mm = pil_b.getlength(full_label) / px_per_mm
+                wrapped = _wrap_by_width(str(value), avail - lbl_w_mm, avail)
                 for i, ln in enumerate(wrapped):
                     lines.append(dict(
-                        text=ln, is_first=(i == 0),
+                        text=full_label + ln if i == 0 else ln,
+                        is_first=(i == 0),
                         label=full_label if i == 0 else '',
-                        lbl_w=lbl_w_px   if i == 0 else 0.0,
+                        lbl_w=lbl_w_mm if i == 0 else 0.0,
                     ))
             return lines, size_px, pad_l
 
         cur_px = base_px
         while cur_px > min_px:
             lines, cur_px, pad_l = _build_lines(cur_px)
-            line_h = cur_px * line_ratio
-            if len(lines) * line_h <= (area_h_px - 5.0 * render_scale):
+            line_h = cur_px * line_ratio / px_per_mm
+            if len(lines) * line_h <= (area_h_mm - 5.0 / px_per_mm * scale):
                 break
             cur_px -= step_px
 
         lines, cur_px, pad_l = _build_lines(cur_px)
-        line_h   = cur_px * line_ratio
-        pil_r    = ImageFont.truetype(reg_path,  cur_px)
-        pil_b    = ImageFont.truetype(bold_path, cur_px)
+        line_h = cur_px * line_ratio / px_per_mm
+        size_pt = cur_px * 72.0 / design_ppi
+        pil_r = ImageFont.truetype(reg_path, cur_px)
+        pil_b = ImageFont.truetype(bold_path, cur_px)
 
-        total_h   = len(lines) * line_h
-        up_shift_px = -1.0 * render_scale
-        left_shift_px = 4.0 * render_scale
-        curr_y    = y_px + (area_h_px - total_h) / 2 - up_shift_px
-        curr_x    = x_px + max(0.0, pad_l - left_shift_px)
+        total_h = len(lines) * line_h
+        up_shift_mm = -1.0 / px_per_mm * scale
+        left_shift_mm = 4.0 / px_per_mm * scale
+        curr_y = y_mm + (area_h_mm - total_h) / 2.0 - up_shift_mm
+        curr_x = x_mm + max(0.0, pad_l - left_shift_mm)
 
         for ln in lines:
             if ln['is_first'] and ln['label']:
-                draw.text((curr_x, curr_y), ln['label'], fill=(0, 0, 0, 255), font=pil_b)
+                self._draw_text_top_left(
+                    pdf, curr_x, curr_y, ln['label'],
+                    'CalibriBold', '', size_pt, pil_b, design_ppi
+                )
                 content = ln['text'][len(ln['label']):]
                 if content:
-                    draw.text((curr_x + ln['lbl_w'], curr_y), content,
-                              fill=(0, 0, 0, 255), font=pil_r)
+                    self._draw_text_top_left(
+                        pdf, curr_x + ln['lbl_w'], curr_y,
+                        content, 'Calibri', '', size_pt, pil_r, design_ppi
+                    )
             else:
-                draw.text((curr_x, curr_y), ln['text'], fill=(0, 0, 0, 255), font=pil_r)
+                self._draw_text_top_left(
+                    pdf, curr_x, curr_y, ln['text'],
+                    'Calibri', '', size_pt, pil_r, design_ppi
+                )
             curr_y += line_h
