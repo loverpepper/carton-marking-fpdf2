@@ -670,12 +670,12 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         info_center_y = bottom_area_top + bottom_margin_mm / 2
         vertical_gap = 26.0
 
-        label_font_h_mm = h_mm * 0.028
+        label_font_h_mm = w_mm * 0.0335
         label_font_px = int(label_font_h_mm * px_per_mm)
         label_font_pt = label_font_px * 72.0 / ppi
         pil_lbl = ImageFont.truetype(self.font_paths['CentSchbook'], label_font_px)
 
-        value_font_h_mm = h_mm * 0.024
+        value_font_h_mm = w_mm * 0.0283
         value_font_px = int(value_font_h_mm * px_per_mm)
         value_font_pt = value_font_px * 72.0 / ppi
         pil_val = ImageFont.truetype(self.font_paths['CentSchbook'], value_font_px)

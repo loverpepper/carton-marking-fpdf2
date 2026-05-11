@@ -786,7 +786,7 @@ with tab_batch:
 
                 st.markdown("---")
 
-                # # ── 批量生成按钮 ──
+                # ── 批量生成按钮 ──
                 # batch_ppi = st.selectbox(
                 #     "批量生成分辨率 (PPI) （仅对Excel中ppi列为空的行生效）",
                 #     options=[72, 150, 300], index=1,
@@ -812,9 +812,9 @@ with tab_batch:
                         total = len(df_raw)
                         for i, (_, row) in enumerate(df_raw.iterrows()):
                             row_dict = row.to_dict()
-                            # 如果 ppi 列为空，使用界面选择的 ppi
+                            # 如果 ppi 列为空，默认ppi为300（适合印刷），用户也可以在Excel中为每行单独指定ppi
                             if pd.isna(row_dict.get("ppi", None)) or str(row_dict.get("ppi", "")).strip() == "":
-                                row_dict["ppi"] = str(batch_ppi)
+                                row_dict["ppi"] = 300 
 
                             sku_label = str(row_dict.get("sku_name", f"row_{i+1}")).strip()
                             status_area.info(f"正在生成 [{i+1}/{total}]：{sku_label} ...")
