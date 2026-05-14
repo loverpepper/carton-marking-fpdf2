@@ -481,21 +481,31 @@ class BarberpubFullOverlapStyle(BoxMarkStyle):
         bottom_area_top = y_mm + h_mm - bottom_margin_mm
 
         # SKU 文字（居中，条纹上方）
+        
+        # SKU 文字可利用的高度,分别是总高度减去条纹和底部空白，再减去网址图标占用的高度和上方空白（5%总高）
+        sku_text_h_mm_total = h_mm - (h_mm * 0.05 + webside_h_mm) - (stripe_height_mm + bottom_margin_mm)
+        sku_text_spacing_mm = 12  # SKU 文字与上下元素的间距
+        sku_text_h_mm = sku_text_h_mm_total - sku_text_spacing_mm * 2  # SKU 文字占可用高度的 55%
+        
         sku_text = sku_config.sku_name
         sku_pt, pil_sku = self._get_font_size(
-            sku_text, 'CentSchbook', w_mm * 0.83, ppi, h_mm * 0.23)
+            sku_text, 'CentSchbook', w_mm * 0.83, ppi, sku_text_h_mm)
         sl, st, sr, sb = self._pil_bbox_mm(pil_sku, sku_text, ppi)
         sku_text_w = sr - sl
         sku_text_h = sb - st
 
-        sku_text_y = stripe_y - sku_text_h - h_mm * 0.08
+        sku_text_y = stripe_y - (sku_text_h_mm_total - sku_text_h) / 2 - sku_text_h  # SKU 文字基线位置
         sku_text_x = x_mm + (w_mm - sku_text_w) / 2
         self._draw_text_top_left(pdf, sku_text_x, sku_text_y,
                                   sku_text, 'CentSchbook', '', sku_pt, pil_sku, ppi)
 
         # 窄侧唛标签（右侧）
-        label_h_mm = w_mm * 0.15
+        label_h_mm = h_mm * 0.3225
         label_w_mm = label_h_mm * 2076 / 1073
+        if label_w_mm > w_mm * 0.39:
+            label_w_mm = w_mm * 0.39
+            label_h_mm = label_w_mm * 1073 / 2076
+            
         label_y = bottom_area_top + (bottom_margin_mm - label_h_mm) / 2
         label_x = x_mm + w_mm / 2 + (w_mm / 2 - label_w_mm) / 2
         pdf.image(self.resources['icon_side_label_narrow'],

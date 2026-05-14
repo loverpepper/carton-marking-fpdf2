@@ -507,7 +507,7 @@ with tab_single:
         gross_weight = st.number_input("毛重 (lbs)", min_value=0.0, value=106.9, step=0.1)
         net_weight   = st.number_input("净重 (lbs)", min_value=0.0, value=94.4,  step=0.1)
         st.caption(f"⚖️ 换算千克：毛重 {gross_weight * 0.453592:.1f} kg / 净重 {net_weight * 0.453592:.1f} kg")
-        sn_code      = st.text_input("SN 条形码（NPC码）", value="08429381073953",
+        sn_code      = st.text_input("SN 条形码（UPC码）", value="08429381073953",
                                      help="条形码序列号")
         origin_text  = st.text_input("原产地文字", value="MADE IN CHINA")
         style_params['side_text'] = {

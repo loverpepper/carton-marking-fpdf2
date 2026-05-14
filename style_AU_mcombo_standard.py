@@ -423,6 +423,8 @@ class MComboStandardStyle(BoxMarkStyle):
         # ── 4. 底部黑色底框（S 形过渡）──────────────────────────────────────────
         self._load_fonts()
         fonts_paths = self.font_paths  # 确保字体路径已加载，供后续使用
+        
+        # 加拿大样式正唛左下角也需要更改动态的公司邮箱和公司名信息
         icon_company = general_functions.draw_dynamic_company_brand(
             sku_config,
             sku_config.company_name,

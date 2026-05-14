@@ -18,7 +18,7 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
         return "mcombo_general_standard"
 
     def get_style_description(self):
-        return "MCombo 通用箱唛第一箱 箱唛样式"
+        return "MCombo 通用箱唛第一箱 箱唛样式（宁波专用）"
 
     def get_required_params(self):
         return ['length_cm', 'width_cm', 'height_cm', 'color', 'product',
