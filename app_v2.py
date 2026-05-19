@@ -555,7 +555,7 @@ with tab_single:
                                            help="选择目标市场，留空则不启用国家开关")
             nm_company_name = st.text_input("公司名称 company_name", value="NEWACME LLC")
             nm_contact_info = st.text_input("联系方式 contact_info",
-                                            value="www.mcombo.com / sale_uk@newacmellc.com")
+                                            value="www.mcombo.com / sales_uk@newacmellc.com")
             nm_show_fsc    = st.selectbox("显示FSC标志 show_fsc",    options=["否", "是"], index=1) == "是"
 
         with nm_col2:
