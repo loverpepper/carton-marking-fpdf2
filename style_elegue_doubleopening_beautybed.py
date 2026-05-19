@@ -314,7 +314,7 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
                 engine.Text("G.W./N.W.", font_family="CentSchbook", font_style="", font_size_pt=label_pt, font_path=self.font_paths['CentSchbook'],
                             color = sku_config.background_color,
                             draw_background=True,
-                            border_radius=51, padding_x = 4.7, padding_y = padding_y
+                            border_radius=20 * 25.4 / sku_config.ppi, padding_x = 4.7, padding_y = padding_y
                             ),
                 engine.Text(weight_text, font_family="CentSchbook", font_style="", font_size_pt=value_pt, font_path=self.font_paths['CentSchbook'],
                             nudge_y=value_baseline_nudge("G.W./N.W.", weight_text)),
@@ -329,7 +329,7 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
                 engine.Text("BOX SIZE", font_family="CentSchbook", font_style="", font_size_pt=label_pt, font_path=self.font_paths['CentSchbook'],
                             color = sku_config.background_color,
                             draw_background=True,
-                            border_radius=51, padding_x = 4.7, padding_y = padding_y
+                            border_radius=20 * 25.4 / sku_config.ppi, padding_x = 4.7, padding_y = padding_y
                             ),
                 engine.Text(dimension_text, font_family="CentSchbook", font_style="", font_size_pt=value_pt, font_path=self.font_paths['CentSchbook'],
                             nudge_y=value_baseline_nudge("BOX SIZE", dimension_text)),

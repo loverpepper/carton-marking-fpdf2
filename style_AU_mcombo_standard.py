@@ -338,7 +338,7 @@ class MComboStandardStyle(BoxMarkStyle):
         # 圆角矩形背景 (padding_cm=(0.8, 0.4), radius=16px)
         pad_x_mm = 8.0            # 0.8 cm
         pad_y_top_mm = 4.0 * 0.7  # 2.8 mm
-        pad_y_bot_mm = 4.0 * 1.4  # 5.6 mm
+        pad_y_bot_mm = 4.0 * 0.7  # 2.8 mm
         radius_mm = 16 * 25.4 / ppi
 
         rect_x = color_x - pad_x_mm

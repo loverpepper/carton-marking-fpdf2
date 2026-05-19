@@ -91,11 +91,11 @@ class MacroutTopAndBottomNarrowStyle(BoxMarkStyle):
         font_base = self.base_dir / 'assets' / 'Macrout' / '天地盖' / '箱唛字体'
         self.font_paths = {
             'Calibri Regular':                      str(font_base / 'calibri.ttf'),
-            'ITC Avant Garde Gothic Demi Cyrillic': str(font_base / 'itc-avant-garde-gothic-demi-cyrillic.otf'),
+            'ITC Avant Garde Gothic Demi Cyrillic': str(font_base / 'itc-avant-garde-gothic-demi-cyrillic-fixed.otf'),
             'Arial Rounded MT Bold':                str(font_base / 'ARLRDBD.ttf'),
-            'Arial Regular':                        str(font_base / 'arial.ttf'),
-            'Arial Bold':                           str(font_base / 'arialbd.ttf'),
-            'Calibri Bold':                         str(font_base / 'calibri bold.ttf'),
+            'Arial Regular':                        str(font_base / 'arialmt.ttf'),
+            'Arial Bold':                           str(font_base / 'arial-boldmt.ttf'),
+            'Calibri Bold':                         str(font_base / 'calibri-boldmt.ttf'),
         }
 
     # ── fpdf2 字体注册 ──────────────────────────────────────────────────────────
@@ -106,7 +106,7 @@ class MacroutTopAndBottomNarrowStyle(BoxMarkStyle):
         pdf.add_font('ArialRounded',  '',  self.font_paths['Arial Rounded MT Bold'])
         pdf.add_font('Arial',         '',  self.font_paths['Arial Regular'])
         pdf.add_font('Arial',         'B', self.font_paths['Arial Bold'])
-        pdf.add_font('Calibri',       'B', self.font_paths['Calibri Bold'])
+        pdf.add_font('CalibriBold',   '',  self.font_paths['Calibri Bold'])
 
     # ── 核心绘制入口 ────────────────────────────────────────────────────────────
 
@@ -224,7 +224,7 @@ class MacroutTopAndBottomNarrowStyle(BoxMarkStyle):
             children=[
                 engine.Text(product_text, 'ITCAvantGarde', product_pt,
                             font_path=self.font_paths["ITC Avant Garde Gothic Demi Cyrillic"], ppi=ppi, nudge_y=h_mm * 0.02),
-                engine.Text(sku_text, 'Calibri', sku_pt, 'B',
+                engine.Text(sku_text, 'CalibriBold', sku_pt,
                             font_path=self.font_paths['Calibri Bold'], ppi=ppi),
                 engine.Row(
                     justify='start', align='center',
@@ -453,5 +453,5 @@ class MacroutTopAndBottomNarrowStyle(BoxMarkStyle):
             sku_bc_x + sku_bc_w_mm * 0.37,
             y_mm + h_mm * 0.80,
             origin_text,
-            'Calibri', 'B', origin_text_size_pt, pil_origin, ppi,
+            'CalibriBold', '', origin_text_size_pt, pil_origin, ppi,
         )
