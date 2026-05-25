@@ -259,7 +259,7 @@ class BarberpubTopAndBottomStyle(BoxMarkStyle):
 
             # ── 文字内容 ──────────────────────────────────────────────────────
             sku_text = sku_config.sku_name
-            color_text = f"({sku_config.color.upper()})"
+            color_text = f"{sku_config.color.upper()}"
             gw_str = "G.W./N.W."
             weight_str = (
                 f"{sku_config.side_text['gw_value']} / "
