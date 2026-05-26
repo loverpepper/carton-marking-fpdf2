@@ -1,5 +1,5 @@
 # 锁定 Python 3.12.12 精简版镜像
-FROM python:3.12.12-slim
+FROM python:3.12-slim
 
 # 1. 换国内 apt 源（兼容 Debian bookworm/trixie 两种格式）
 #    新版 Debian 用 DEB822 格式（.sources），旧版用 sources.list
