@@ -286,7 +286,7 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
         
         # SKU文字 Label文字 详细信息文字的大小
         sku_pt, pil_sku = self._get_font_size(
-            sku_text, 'CentSchbook', w_mm * 0.9, sku_config.ppi, h_mm * 0.13,)
+            sku_text, 'CentSchbook', w_mm * 0.9, sku_config.ppi, h_mm * 0.20,)
         
         label_pt, pil_lbl = self._get_font_size(
             "G.W./N.W.", 'CentSchbook', w_mm * 0.103, sku_config.ppi, h_mm * 0.04)
@@ -338,17 +338,17 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
         
         # Label文字 和 详细信息文字 row 与网址组合
         icon_webside = self.resources['icon_webside']
-        icon_webside_target_width = w_mm * 0.61
+        icon_webside_target_width = w_mm * 0.58
         
         left_col = engine.Column(
-            align="center",
+            align="left",
             justify="start",
             spacing=25,
             children=[
                 engine.Row(
                     align="bottom",
                     justify="start",
-                    spacing=10,
+                    spacing = icon_webside_target_width - (weight_row.width + dimention_row.width),
                     children=[
                         weight_row,
                         dimention_row,
@@ -359,8 +359,8 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
         )
         
         # 窄侧唛标签（右侧）
-        label_h_mm = h_mm * 0.19
-        label_w_mm = label_h_mm * 2076 / 1073
+        label_w_mm = w_mm * 0.242
+        label_h_mm = label_w_mm * 1073 / 2076
         # label_y = bottom_area_top + (bottom_margin_mm - label_h_mm) / 2
         # label_x = x_mm + w_mm / 2 + (w_mm / 2 - label_w_mm) / 2
         # pdf.image(self.resources['icon_side_label_narrow'],
@@ -369,7 +369,7 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
             align="center",
             justify="space-between",
             fixed_width=w_mm,
-            padding_x = w_mm * 0.04,
+            padding_x = w_mm * 0.06,
             spacing=10,
             children=[
                 left_col,
@@ -481,11 +481,17 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
                 origin_text, 'CentSchbook', '', font_pt, pil_orig, ppi,
                 color=(r, g, b))
 
-    def _draw_front_legal_label(self, pdf, sku_config, x_mm, y_mm, box_w_mm, box_h_mm):
+    def _draw_front_legal_label(self, pdf, sku_config, x_mm, y_mm, box_w_mm, box_h_mm,
+                                stack_icon_4=False):
         """Draw the GE legal label in a short, wide front-panel layout."""
         ppi = float(sku_config.ppi)
         base_h_mm = 77.0
         scale = box_h_mm / base_h_mm
+
+        if stack_icon_4:
+            self._draw_front_legal_label_stacked_icon_4(
+                pdf, sku_config, x_mm, y_mm, box_w_mm, box_h_mm, scale)
+            return
 
         left_w = min(box_w_mm * 0.72, box_h_mm * 3.8 * 0.72)
         right_w = box_w_mm - left_w
@@ -560,6 +566,87 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
             icon_4,
             x=split_x + (right_w - icon_4_w) / 2.0,
             y=y_mm + (box_h_mm - icon_4_h) / 2.0,
+            w=icon_4_w,
+            h=icon_4_h,
+        )
+
+    def _draw_front_legal_label_stacked_icon_4(self, pdf, sku_config, x_mm, y_mm,
+                                               box_w_mm, box_h_mm, scale):
+        """Draw legal label with icon_4 below row2_icons for narrow front panels."""
+        ppi = float(sku_config.ppi)
+        icon_4 = self.resources['legal_icon_4']
+        icon_4_area_h = box_h_mm * 0.42
+        top_h = box_h_mm - icon_4_area_h
+        row1_h = top_h * 0.72
+        row2_h = top_h - row1_h
+
+        lw_thin = max(0.12, 5.0 * 25.4 / ppi * scale)
+        lw_thick = max(0.16, 7.0 * 25.4 / ppi * scale)
+
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(lw_thick)
+        pdf.rect(x_mm, y_mm, box_w_mm, box_h_mm, style='D')
+
+        row2_y = y_mm + row1_h
+        icon_4_area_y = y_mm + top_h
+        pdf.set_line_width(lw_thin)
+        pdf.line(x_mm, row2_y, x_mm + box_w_mm, row2_y)
+        pdf.line(x_mm, icon_4_area_y, x_mm + box_w_mm, icon_4_area_y)
+
+        icon_2 = self.resources['legal_icon_2']
+        icon_2_h = row1_h * 0.26
+        icon_2_w = icon_2_h * icon_2.width / icon_2.height
+        row1_icon_margin = 3.5 * scale
+        icon_2_x = x_mm + box_w_mm - row1_icon_margin - icon_2_w
+        icon_2_y = y_mm + (row1_h - icon_2_h) / 2.0
+        divider_x = icon_2_x - row1_icon_margin / 2.0
+        pdf.line(divider_x, y_mm, divider_x, y_mm + row1_h)
+        pdf.image(icon_2, x=icon_2_x, y=icon_2_y, w=icon_2_w, h=icon_2_h)
+
+        if getattr(sku_config, 'legal_data', None):
+            text_x = x_mm + 3.5 * scale
+            text_y = y_mm + 1.0 * scale
+            text_w = max(1.0, divider_x - text_x - 2.0 * scale)
+            self._draw_front_legal_text(
+                pdf, sku_config, text_x, text_y, text_w, row1_h, scale)
+
+        row2_icons = []
+        icon_3_1 = self.resources['legal_icon_3_1']
+        icon_3_1_h = row2_h * 0.85
+        icon_3_1_w = icon_3_1_h * icon_3_1.width / icon_3_1.height
+        row2_icons.append((icon_3_1, icon_3_1_w, icon_3_1_h))
+
+        for is_on, key in [
+            (getattr(sku_config, 'legal_CE', 0), 'legal_icon_CE'),
+            (getattr(sku_config, 'legal_UKCA', 0), 'legal_icon_UKCA'),
+            (getattr(sku_config, 'legal_RoHs', 0), 'legal_icon_RoHs'),
+            (getattr(sku_config, 'legal_WEEE', 0), 'legal_icon_WEEE'),
+            (getattr(sku_config, 'legal_GreenDot', 0), 'legal_icon_GreenDot'),
+        ]:
+            if is_on == 1:
+                img = self.resources[key]
+                ih = row2_h * 0.4
+                iw = ih * img.width / img.height
+                row2_icons.append((img, iw, ih))
+
+        icon_gap = 5.0 * scale
+        total_icons_w = sum(iw for _, iw, _ in row2_icons)
+        total_icons_w += icon_gap * max(0, len(row2_icons) - 1)
+        cur_x = x_mm + (box_w_mm - total_icons_w) / 2.0
+        for img, iw, ih in row2_icons:
+            pdf.image(img, x=cur_x, y=row2_y + (row2_h - ih) / 2.0, w=iw, h=ih)
+            cur_x += iw + icon_gap
+
+        icon_4_w = box_w_mm * 0.86
+        icon_4_h = icon_4_w * icon_4.height / icon_4.width
+        max_icon_4_h = icon_4_area_h * 0.72
+        if icon_4_h > max_icon_4_h:
+            icon_4_h = max_icon_4_h
+            icon_4_w = icon_4_h * icon_4.width / icon_4.height
+        pdf.image(
+            icon_4,
+            x=x_mm + (box_w_mm - icon_4_w) / 2.0,
+            y=icon_4_area_y + (icon_4_area_h - icon_4_h) / 2.0,
             w=icon_4_w,
             h=icon_4_h,
         )
@@ -670,12 +757,12 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
         # 顶层row, 包含logo和 【NewAcme GmbH】文字
         # 1. Logo（左上角）
         icon_logo = self.resources['icon_logo']
-        logo_w_mm = w_mm * 0.19
+        logo_w_mm = 120
 
         # 2. 公司信息（右上角）
         company_text = "NewAcme GmbH"
         company_pt, pil_company = self._get_font_size(
-            company_text, 'CentSchbook', w_mm * 0.17, ppi, h_mm * 0.1)
+            company_text, 'CentSchbook', 120, ppi, h_mm * 0.1)
         
         upper_row = engine.Row(
             align="top",
@@ -717,7 +804,7 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
 
         color_text = sku_config.color.upper()
         color_pt, _ = self._get_font_size(
-            color_text, 'CentSchbook', w_mm * 0.13, ppi, h_mm * 0.11)
+            color_text, 'CentSchbook', w_mm * 0.11, ppi, h_mm * 0.11)
         color_el = engine.Text(
             color_text,
             font_family="CentSchbook",
@@ -762,30 +849,31 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
             nudge_y = - pad_y * 2
         )
         
-        # 底部整体组成一个row
-        main_row = engine.Row(
-            align="bottom",
-            justify="space-between",
+        # 底部整体组成一个Column
+        bottom_left_col = engine.Column(
+            align="left",
+            justify="start",
+            spacing = 15,
             fixed_width=w_mm - margin_left - margin_right + 6.0,
             children=[
-                bottom_left_row,
                 box_el,
+                bottom_left_row,
             ],
         )
-        main_row.layout(
+        bottom_left_col.layout(
             x_mm + margin_left - 6.0,
-            bottom_text_y - main_row.height,
+            bottom_text_y - bottom_left_col.height,
         )
-        main_row.render(pdf)
+        bottom_left_col.render(pdf)
         
         # 7. 绘制产品名称
         product_text = sku_config.product
         prod_pt, _ = self._get_font_size(
-            product_text, 'DroidSans', w_mm * 0.52, ppi, h_mm * 0.28)
+            product_text, 'DroidSans', 320, ppi, h_mm * 0.28)
         
         # 6.  标语图片（产品名称下方，居中）
         icon_slogan = self.resources['icon_slogan']
-        slogan_w_mm = w_mm * 0.27
+        slogan_w_mm = 150
         
         middle_col = engine.Column(
             align="center",
@@ -797,7 +885,7 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
                 engine.Text(product_text, font_family="DroidSans", font_style="", font_size_pt=prod_pt, font_path=self.font_paths['DroidSans'], ppi=ppi),
                 engine.Image(icon_slogan, width=slogan_w_mm),
             ],
-            nudge_y = - h_mm * 0.13
+            nudge_y = - h_mm * 0.11
         )
         
         middle_col.layout(x_mm, y_mm)
@@ -805,13 +893,18 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
 
         
         if getattr(sku_config, 'legal_data', None):
-            legal_h_mm = min(h_mm * 0.18, 82.0)
-            legal_w_mm = min(w_mm * 0.62, legal_h_mm * 4.5)
-            legal_x = x_mm + (w_mm - legal_w_mm) / 2.0
-            legal_bottom_limit = bottom_text_y - 18.0
-            legal_y = min(y_mm + h_mm * 0.51, legal_bottom_limit - legal_h_mm)
-            legal_y = max(y_mm + margin_top + 45.0, legal_y - 12.0)
+            front_ratio = w_mm / h_mm if h_mm else 999.0
+            stack_icon_4 = front_ratio < 2.0
+            if stack_icon_4:
+                legal_h_mm = min(h_mm * 0.250, 130.0)
+                legal_w_mm = min(w_mm * 0.23, legal_h_mm * 1.55)
+            else:
+                legal_h_mm = min(h_mm * 0.18, 82.0)
+                legal_w_mm = min(w_mm * 0.62, legal_h_mm * 4.5)
+            legal_x = x_mm + w_mm - legal_w_mm - margin_right
+            legal_y = bottom_text_y - legal_h_mm
             self._draw_front_legal_label(
-                pdf, sku_config, legal_x, legal_y, legal_w_mm, legal_h_mm)
+                pdf, sku_config, legal_x, legal_y, legal_w_mm, legal_h_mm,
+                stack_icon_4=stack_icon_4)
 
         return
