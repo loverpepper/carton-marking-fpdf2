@@ -24,7 +24,7 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
 
     def get_required_params(self):
         return ['length_cm', 'width_cm', 'height_cm', 'ppi', 'color', 'product',
-                'side_text', 'sku_name', 'box_number', 'img_line_drawing']
+            'side_text', 'sku_name', 'box_number']
 
     def get_layout_config_mm(self, sku_config):
         """德国ELEGUE Barberpub 美容床 对开盖样式 - 12块布局（4列3行），单位 mm"""
