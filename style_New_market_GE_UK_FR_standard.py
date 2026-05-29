@@ -6,6 +6,7 @@ from fpdf import FPDF
 from PIL import Image, ImageFont
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
+import layout_engine as engine
 
 @StyleRegistry.register
 class MComboStandardStyle(BoxMarkStyle):
@@ -120,6 +121,9 @@ class MComboStandardStyle(BoxMarkStyle):
             # 侧唛右上两种logo
             'icon_side_logo_elegue': Image.open(self.res_base / '侧唛logo-ELEGUE.png').convert('RGBA'),
             'icon_side_logo_mcombo': Image.open(self.res_base / '侧唛logo-MCombo.png').convert('RGBA'),
+            
+            'icon_flap_keepboxes':  Image.open(self.res_base / '通用箱唛-保留盒子.png').convert('RGBA'),
+            'icon_flap_over32kg':  Image.open(self.res_base / '通用箱唛-超32KG.png').convert('RGBA'),
             
             'icon_side_text_box': general_functions.make_it_pure_black(Image.open(self.res_base / '条码框-去掉竖线.png').convert('RGBA')),
             'icon_side_sponge': Image.open(self.res_base / '海绵认证.png').convert('RGBA'),
@@ -337,44 +341,89 @@ class MComboStandardStyle(BoxMarkStyle):
 
     def _draw_flap_left(self, pdf, sku_config,
                            x_mm, y_mm, w_mm, h_mm, rotate_180=False):
-        """Draw left flap panel with icon (optionally rotated 180°)."""
-        total_boxes = sku_config.box_number['total_boxes']
-        icon = self.resources[f'icon_left_{total_boxes}_panel']
+        if sku_config.box_number['total_boxes']>1:
+            """
+            总箱数大于1时，左侧翻盖显示总箱数图标（icon_left_{total_boxes}_panel）
+                - 例如总箱数3，则使用 icon_left_3_panel
+                - 以此类推，根据sku_config.box_number动态选择对应图标
+            如果总箱数为1，则左侧翻盖显示保留箱子图标和根据重量显示超重图标
+            """
+            total_boxes = sku_config.box_number['total_boxes']
+            icon = self.resources[f'icon_left_{total_boxes}_panel']
 
-        target_h_mm = 100.0   # 10cm
-        max_w_mm_limit = w_mm * 0.8
-        icon_w = target_h_mm * icon.width / icon.height
-        if icon_w > max_w_mm_limit:
-            icon_w = max_w_mm_limit
-            icon_h = icon_w * icon.height / icon.width
+            target_h_mm = 100.0   # 10cm
+            max_w_mm_limit = w_mm * 0.8
+            icon_w = target_h_mm * icon.width / icon.height
+            if icon_w > max_w_mm_limit:
+                icon_w = max_w_mm_limit
+                icon_h = icon_w * icon.height / icon.width
+            else:
+                icon_h = target_h_mm
+
+            icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
+            ix = x_mm + (w_mm - icon_w) / 2.0
+            iy = y_mm + (h_mm - icon_h) / 2.0
+            pdf.image(icon_to_use, x=ix, y=iy, w=icon_w, h=icon_h)
         else:
-            icon_h = target_h_mm
-
-        icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
-        ix = x_mm + (w_mm - icon_w) / 2.0
-        iy = y_mm + (h_mm - icon_h) / 2.0
-        pdf.image(icon_to_use, x=ix, y=iy, w=icon_w, h=icon_h)
+            icon_keepboxes = self.resources['icon_flap_keepboxes']
+            icon_keepboxex_height= 50.0   # 5cm
+            icon_keepboxes_width = icon_keepboxex_height * icon_keepboxes.width / icon_keepboxes.height
+            
+            icon_over32kg = self.resources['icon_flap_over32kg']
+            icon_over32kg_height = 50.0   # 5cm
+            icon_over32kg_width = icon_over32kg_height * icon_over32kg.width / icon_over32kg.height
+            icon_over32kg_elem = engine.Image(icon_over32kg, width = icon_over32kg_width, height = icon_over32kg_height)
+            
+            main_row_children = [engine.Image(icon_keepboxes, width = icon_keepboxes_width, height = icon_keepboxex_height)]
+            if sku_config.side_text['gw_value'] * 0.453592 > 32:  # Convert GW from lbs to kg for comparison
+                main_row_children.append(icon_over32kg_elem)
+            
+            main_row = engine.Row(
+                align = 'center',
+                justify = 'center',
+                fixed_height = h_mm,
+                fixed_width = w_mm,
+                spacing = 80,
+                children = main_row_children,
+                nudge_y = h_mm * 0.22
+            )
+            if rotate_180 == False:
+                """只渲染左上flap，左下flap保持空白"""
+                main_row.layout( x_mm, y_mm)
+                main_row.render(pdf)
+            elif rotate_180 == True:
+                """保持空白"""
+                pass
+            
+            
+        return 
 
     def _draw_flap_right(self, pdf, sku_config,
                             x_mm, y_mm, w_mm, h_mm, rotate_180=False):
-        """Draw right flap panel with icon (optionally rotated 180°)."""
-        total_boxes = sku_config.box_number['total_boxes']
-        current_box = sku_config.box_number['current_box']
-        icon = self.resources[f'icon_right_{total_boxes}-{current_box}_panel']
+        if sku_config.box_number['total_boxes']>1:
+            """
+            总箱数大于1时，右侧翻盖显示当前箱号图标（icon_right_{total_boxes}-{current_box}_panel）
+                - 例如总箱数3，当前是第2箱，则使用 icon_right_3-2_panel
+                - 以此类推，根据sku_config.box_number动态选择对应图标
+                - 如果总箱数为1，则右侧翻盖不显示箱号图标（保持空白）
+            """
+            total_boxes = sku_config.box_number['total_boxes']
+            current_box = sku_config.box_number['current_box']
+            icon = self.resources[f'icon_right_{total_boxes}-{current_box}_panel']
 
-        target_h_mm = 90.0   # 9cm
-        max_w_mm_limit = w_mm * 0.8
-        icon_w = target_h_mm * icon.width / icon.height
-        if icon_w > max_w_mm_limit:
-            icon_w = max_w_mm_limit
-            icon_h = icon_w * icon.height / icon.width
-        else:
-            icon_h = target_h_mm
+            target_h_mm = 90.0   # 9cm
+            max_w_mm_limit = w_mm * 0.8
+            icon_w = target_h_mm * icon.width / icon.height
+            if icon_w > max_w_mm_limit:
+                icon_w = max_w_mm_limit
+                icon_h = icon_w * icon.height / icon.width
+            else:
+                icon_h = target_h_mm
 
-        icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
-        ix = x_mm + (w_mm - icon_w) / 2.0
-        iy = y_mm + (h_mm - icon_h) / 2.0
-        pdf.image(icon_to_use, x=ix, y=iy, w=icon_w, h=icon_h)
+            icon_to_use = icon.rotate(180, expand=True) if rotate_180 else icon
+            ix = x_mm + (w_mm - icon_w) / 2.0
+            iy = y_mm + (h_mm - icon_h) / 2.0
+            pdf.image(icon_to_use, x=ix, y=iy, w=icon_w, h=icon_h)
 
     # ── fully-vector bottom bar ────────────────────────────────────────────────
 
@@ -469,12 +518,13 @@ class MComboStandardStyle(BoxMarkStyle):
         pdf.polygon(curve, style='F')
 
         # ── E. Box-number icon (left block, vertically centred) ───────────────
-        box_icon = self.resources[f"icon_box_number_{sku_config.box_number['current_box']}"]
-        box_icon_h_mm = h_right_mm * 0.25          # 25 % of h_right = 25 mm
-        box_icon_w_mm = box_icon_h_mm * box_icon.width / box_icon.height
-        box_icon_x = x_mm + margin_1cm_mm
-        box_icon_y = y_left_top + (h_left_mm - box_icon_h_mm) / 2.0
-        pdf.image(box_icon, x=box_icon_x, y=box_icon_y, w=box_icon_w_mm, h=box_icon_h_mm)
+        if sku_config.box_number['total_boxes']>1:
+            box_icon = self.resources[f"icon_box_number_{sku_config.box_number['current_box']}"]
+            box_icon_h_mm = h_right_mm * 0.25          # 25 % of h_right = 25 mm
+            box_icon_w_mm = box_icon_h_mm * box_icon.width / box_icon.height
+            box_icon_x = x_mm + margin_1cm_mm
+            box_icon_y = y_left_top + (h_left_mm - box_icon_h_mm) / 2.0
+            pdf.image(box_icon, x=box_icon_x, y=box_icon_y, w=box_icon_w_mm, h=box_icon_h_mm)
 
         # ── F. Company brand background ───────────────────────────────────────
         pdf.image(brand_bg, x=brand_x_mm, y=brand_y_mm, w=brand_w_mm, h=icon_h_mm)

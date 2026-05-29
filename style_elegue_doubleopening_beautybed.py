@@ -792,7 +792,7 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
         # 4. SKU文字 + 颜色文字（左下角）
         sku_text = sku_config.sku_name
         sku_pt, _ = self._get_font_size(
-            sku_text, 'CentSchbook', w_mm * 0.505, ppi, h_mm * 0.16)
+            sku_text, 'CentSchbook', w_mm * 0.48, ppi, h_mm * 0.16)
         sku_el = engine.Text(
             sku_text,
             font_family="CentSchbook",
@@ -804,7 +804,7 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
 
         color_text = sku_config.color.upper()
         color_pt, _ = self._get_font_size(
-            color_text, 'CentSchbook', w_mm * 0.11, ppi, h_mm * 0.11)
+            color_text, 'CentSchbook', w_mm * 0.10, ppi, h_mm * 0.11)
         color_el = engine.Text(
             color_text,
             font_family="CentSchbook",
@@ -896,8 +896,8 @@ class ElegueBarberpubDoubleOpeningStyle(BoxMarkStyle):
             front_ratio = w_mm / h_mm if h_mm else 999.0
             stack_icon_4 = front_ratio < 2.0
             if stack_icon_4:
-                legal_h_mm = min(h_mm * 0.250, 130.0)
-                legal_w_mm = min(w_mm * 0.23, legal_h_mm * 1.55)
+                legal_h_mm = min(h_mm * 0.270, 130.0)
+                legal_w_mm = min(w_mm * 0.29, legal_h_mm * 1.85)
             else:
                 legal_h_mm = min(h_mm * 0.18, 82.0)
                 legal_w_mm = min(w_mm * 0.62, legal_h_mm * 4.5)
