@@ -159,7 +159,7 @@ class MComboStandardStyle(BoxMarkStyle):
         self.font_ratios = {
             'color_font': 51 / 1332,
             'product_font': 180 / 1332,
-            'size_font': 60 / 1332,
+            'size_font': 80 / 1332,
             'regular_font': 40 / 1332,
             'side_font': 40 / 1332
         }
