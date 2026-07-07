@@ -190,7 +190,7 @@ class MComboVerticalStyle(BoxMarkStyle):
         cy_side = y1 + h_mm / 2
         for sx in (x1, x3):
             cx = sx + w_mm / 2
-            with pdf.rotation(90, cx, cy_side):
+            with pdf.rotation(-90, cx, cy_side):
                 self._draw_side_panel(pdf, sku_config,
                                       cx - h_mm / 2, cy_side - w_mm / 2,
                                       h_mm, w_mm)
