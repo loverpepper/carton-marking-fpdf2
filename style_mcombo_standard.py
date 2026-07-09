@@ -105,6 +105,7 @@ class MComboStandardStyle(BoxMarkStyle):
             'icon_right_2-1_panel': Image.open(res_base / '顶部-右-2-1.png').convert('RGBA'),
             'icon_right_2-2_panel': Image.open(res_base / '顶部-右-2-2.png').convert('RGBA'),
             'icon_right_3-1_panel': Image.open(res_base / '顶部-右-3-1.png').convert('RGBA'),
+            'icon_right_3-1_less_panel': Image.open(res_base / '顶部-右-3-1-少于70lbs.png').convert('RGBA'),
             'icon_right_3-2_panel': Image.open(res_base / '顶部-右-3-2.png').convert('RGBA'),
             'icon_right_3-3_panel': Image.open(res_base / '顶部-右-3-3.png').convert('RGBA'),
             'icon_right_4-1_panel': Image.open(res_base / '顶部-右-4-1.png').convert('RGBA'),
@@ -320,8 +321,10 @@ class MComboStandardStyle(BoxMarkStyle):
         """绘制右侧翻盖面板（up 旋转 180°，down 正常）"""
         total_boxes = sku_config.box_number['total_boxes']
         current_box = sku_config.box_number['current_box']
+    
         icon = self.resources[f'icon_right_{total_boxes}-{current_box}_panel']
-
+        if total_boxes ==3 and current_box ==1 and sku_config.side_text['gw_value']<70:
+            icon = self.resources[f'icon_right_{total_boxes}-{current_box}_less_panel']
         target_h_mm = 100.0
         max_w_mm = w_mm * 0.8
         icon_w_natural = target_h_mm * icon.width / icon.height
