@@ -388,7 +388,7 @@ if 'last_gen_info' not in st.session_state:
     st.session_state.last_gen_info = None
 
 # 页面标题
-st.title("📦 Mcombo·Barberpub·Exacme·新市场 箱唛生成器 V4")
+st.title("📦 Mcombo·Barberpub·Exacme·ELEGUE 箱唛生成器")
 st.caption("🎨 支持多样式切换 · 支持批量Excel生成")
 
 
