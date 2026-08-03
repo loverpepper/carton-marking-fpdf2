@@ -13,6 +13,7 @@ from style_base import StyleRegistry
 import style_mcombo_standard
 import style_mcombo_general_standard
 import style_mcombo_vertical
+import style_mcombo_vertical_meiming
 import style_mcombo_general_vertical
 import style_barberpub_topandbottom
 import style_barberpub_topandbottom_manicure
@@ -28,6 +29,7 @@ import style_AU_mcombo_standard
 import style_wayfair_doubleopening
 import style_New_market_GE_UK_FR_standard
 import style_New_market_GE_UK_FR_vertical
+import style_New_market_GE_UK_FR_vertical_meiming
 import style_elegue_doubleopening_beautybed
 import style_macrout_topandbottom_narrow
 import style_macrout_topandbottom_conventional   

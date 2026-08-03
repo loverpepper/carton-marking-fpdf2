@@ -4,6 +4,7 @@ MCombo 标准样式 - 将原有的 BoxMarkEngine 转换为样式类
 """
 from fpdf import FPDF
 from PIL import Image, ImageFont
+from streamlit import pdf
 from style_base import BoxMarkStyle, StyleRegistry
 import general_functions
 
@@ -12,10 +13,10 @@ class MComboStandardStyle(BoxMarkStyle):
     """MCombo 标准箱唛样式（原始样式）"""
 
     def get_style_name(self):
-        return "new_market_vertical"
+        return "new_market_vertical_meiming"
 
     def get_style_description(self):
-        return "欧洲 侧唛垂直箱唛样式（其他工厂通用版）"
+        return "欧洲 侧唛垂直箱唛样式（美民工厂专用）"
 
     def get_required_params(self):
         return ['length_cm', 'width_cm', 'height_cm', 'color', 'product', 'size', 'side_text', 'sku_name', 'box_number',
@@ -74,10 +75,10 @@ class MComboStandardStyle(BoxMarkStyle):
         # Side panels — fully vector (rotated 90°)
         x, y, w, h = layout['panel_side1']
         self._draw_side_panel(pdf, sku_config, x, y, w, h,
-                                show_legal=True, rotate_deg=90)
+                                show_legal=True, rotate_deg=270)
         x, y, w, h = layout['panel_side2']
         self._draw_side_panel(pdf, sku_config, x, y, w, h,
-                                show_legal=False, rotate_deg=90)
+                                show_legal=False, rotate_deg=270)
 
         # Left flaps
         self._draw_left_flaps(pdf, sku_config, layout)
@@ -503,17 +504,43 @@ class MComboStandardStyle(BoxMarkStyle):
 
     # ── fully-vector side panel ──────────────────────────────────────────────
 
-    def _draw_side_panel(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
-                            show_legal, rotate_deg=0):
+    # def _draw_side_panel(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm,
+    #                         show_legal, rotate_deg=0):
+    #     """Draw the side panel entirely in fpdf2 vector text + images."""
+    #     cx = x_mm + w_mm / 2.0
+    #     cy = y_mm + h_mm / 2.0
+
+    #     if rotate_deg == 90:
+    #         o_x = cx - h_mm / 2.0
+    #         o_y = cy - w_mm / 2.0
+    #         eff_w, eff_h = h_mm, w_mm
+    #         h_left_mm = 80.0
+    #     else:
+    #         o_x, o_y = x_mm, y_mm
+    #         eff_w, eff_h = w_mm, h_mm
+    #         h_left_mm = 100.0
+
+    #     logo_h_mm = min(40.0, eff_h * 0.123)
+
+    #     def _draw():
+    #         self._draw_side_content(pdf, sku_config,
+    #                                  o_x, o_y, eff_w, eff_h,
+    #                                  show_legal, h_left_mm, logo_h_mm)
+
+    #     if rotate_deg == 90:
+    #         with pdf.rotation(angle=90, x=cx, y=cy):
+    #             _draw()
+    #     else:
+    #         _draw()
+    def _draw_side_panel(self, pdf, sku_config, x_mm, y_mm, w_mm, h_mm,show_legal,rotate_deg=0,):
         """Draw the side panel, optionally rotated around its centre."""
         cx = x_mm + w_mm / 2.0
         cy = y_mm + h_mm / 2.0
 
-        # Normalise the value so negative angles and full turns behave as
-        # expected. Quarter turns need a swapped drawing canvas so that the
-        # rotated content keeps the same panel bounds as the existing 90°
-        # layout. Other angles retain the panel's natural drawing dimensions.
+        # 将角度规范化到 0～360°，兼容负数角度和超过 360° 的角度。
         angle = float(rotate_deg) % 360.0
+
+        # 旋转 90° 或 270° 时交换画布宽高，使旋转后的内容匹配面板。
         is_quarter_turn = abs((angle % 180.0) - 90.0) < 1e-9
         has_rotation = abs(angle) > 1e-9
 
@@ -530,9 +557,17 @@ class MComboStandardStyle(BoxMarkStyle):
         logo_h_mm = min(40.0, eff_h * 0.123)
 
         def _draw():
-            self._draw_side_content(pdf, sku_config,
-                                     o_x, o_y, eff_w, eff_h,
-                                     show_legal, h_left_mm, logo_h_mm)
+            self._draw_side_content(
+                pdf,
+                sku_config,
+                o_x,
+                o_y,
+                eff_w,
+                eff_h,
+                show_legal,
+                h_left_mm,
+                logo_h_mm,
+            )
 
         if has_rotation:
             with pdf.rotation(angle=angle, x=cx, y=cy):

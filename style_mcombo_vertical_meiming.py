@@ -15,10 +15,10 @@ class MComboVerticalStyle(BoxMarkStyle):
     """MCombo 第二箱三箱箱唛样式 (fpdf2 版)"""
 
     def get_style_name(self):
-        return "mcombo_vertical"
+        return "mcombo_vertical_meiming"
 
     def get_style_description(self):
-        return "MCombo 第二箱三箱 箱唛样式（其他工厂通用版）"
+        return "MCombo 第二箱三箱 箱唛样式（美民工厂专用）"
 
     def get_required_params(self):
         return ['length_cm', 'width_cm', 'height_cm', 'color', 'product',
@@ -190,7 +190,7 @@ class MComboVerticalStyle(BoxMarkStyle):
         cy_side = y1 + h_mm / 2
         for sx in (x1, x3):
             cx = sx + w_mm / 2
-            with pdf.rotation(90, cx, cy_side):
+            with pdf.rotation(-90, cx, cy_side):
                 self._draw_side_panel(pdf, sku_config,
                                       cx - h_mm / 2, cy_side - w_mm / 2,
                                       h_mm, w_mm)
