@@ -629,25 +629,41 @@ class MComboStandardStyle(BoxMarkStyle):
         gap_above_mm   = 20.0 if h_left_mm >= 100.0 else 10.0
         elem_y   = panel_bottom - h_left_mm - gap_above_mm - table_h_mm
         gap_mm   = 3.0
-        current_x = o_x + 30.0
 
         def _embed_h(res_key):
             img = self.resources[res_key]
             w   = table_h_mm * img.width / img.height
             return img, w
 
+        sp_img = sp_w = None
         if getattr(sku_config, 'sponge_verified', False):
             sp_img, sp_w = _embed_h('icon_side_sponge')
+
+        fs_img = fs_w = None
+        if getattr(sku_config, 'show_fsc', False):
+            fs_img, fs_w = _embed_h('icon_side_FSC')
+
+        raw_box, box_w_mm = _embed_h('icon_side_text_box')
+
+        # Keep the original 30 mm left offset while the complete row fits. On
+        # narrow side panels (for example an 80 x 28 cm panel rotated by 90°),
+        # centre the complete certification/label row instead of letting its
+        # right edge extend beyond the panel.
+        row_widths = [width for width in (sp_w, fs_w, box_w_mm)
+                      if width is not None]
+        row_w_mm = sum(row_widths) + gap_mm * (len(row_widths) - 1)
+        current_x = o_x + 30.0
+        if current_x + row_w_mm > o_x + eff_w:
+            current_x = o_x + (eff_w - row_w_mm) / 2.0
+
+        if sp_img is not None:
             pdf.image(sp_img, x=current_x, y=elem_y, w=sp_w, h=table_h_mm)
             current_x += sp_w + gap_mm
 
-        if getattr(sku_config, 'show_fsc', False):
-            fs_img, fs_w = _embed_h('icon_side_FSC')
+        if fs_img is not None:
             pdf.image(fs_img, x=current_x, y=elem_y, w=fs_w, h=table_h_mm)
             current_x += fs_w + gap_mm
 
-        raw_box   = self.resources['icon_side_text_box']
-        box_w_mm  = table_h_mm * raw_box.width / raw_box.height
         pdf.image(raw_box, x=current_x, y=elem_y, w=box_w_mm, h=table_h_mm)
         self._draw_barcode_box(pdf, sku_config,
                                  current_x, elem_y, box_w_mm, table_h_mm)
@@ -666,24 +682,45 @@ class MComboStandardStyle(BoxMarkStyle):
 
             legal_right_x = o_x + eff_w - right_margin_mm
             legal_left_limit_x = current_x + box_w_mm
-            available_legal_w_mm = max(1.0, legal_right_x - legal_left_limit_x) - 3
+            available_legal_w_mm = max(
+                0.0, legal_right_x - legal_left_limit_x - gap_mm)
             legal_h_by_w_mm = available_legal_w_mm * base_legal_h_mm / base_legal_w_mm
 
             legal_top_limit_y = o_y + margin_side_mm + logo_h_mm
             legal_bottom_limit_y = panel_bottom - h_left_mm - gap_above_mm
             available_legal_h_mm = max(1.0, legal_bottom_limit_y - legal_top_limit_y) * 0.85
 
-            scaled_legal_h_mm = min(
+            right_legal_h_mm = min(
                 base_legal_h_mm,
                 # 当左侧高度较小时，适当压缩法律标高度以保持整体平衡（不超过中间剩余空间的85%）
                 legal_h_by_w_mm,
                 available_legal_h_mm
             )
-            legal_scale = scaled_legal_h_mm / base_legal_h_mm
-            scaled_legal_w_mm = base_legal_w_mm * legal_scale
+            # If the side panel is too narrow to leave a legible legal label
+            # to the right of the barcode label, place it directly above that
+            # label instead. After the complete panel is rotated by 90 degrees,
+            # this appears to the left of the side-mark icons.
+            min_legible_legal_h_mm = table_h_mm * 0.75
+            if right_legal_h_mm < min_legible_legal_h_mm:
+                above_gap_mm = 10.0
+                above_available_h_mm = max(
+                    1.0, elem_y - above_gap_mm - legal_top_limit_y)
+                scaled_legal_w_mm = min(base_legal_w_mm, box_w_mm)
+                scaled_legal_h_mm = (
+                    scaled_legal_w_mm * base_legal_h_mm / base_legal_w_mm)
+                if scaled_legal_h_mm > above_available_h_mm:
+                    scaled_legal_h_mm = above_available_h_mm
+                    scaled_legal_w_mm = (
+                        scaled_legal_h_mm * base_legal_w_mm / base_legal_h_mm)
 
-            legal_x = legal_right_x - scaled_legal_w_mm
-            legal_y = legal_bottom_limit_y - scaled_legal_h_mm
+                legal_x = current_x + (box_w_mm - scaled_legal_w_mm) / 2.0
+                legal_y = elem_y - above_gap_mm - scaled_legal_h_mm
+            else:
+                scaled_legal_h_mm = right_legal_h_mm
+                legal_scale = scaled_legal_h_mm / base_legal_h_mm
+                scaled_legal_w_mm = base_legal_w_mm * legal_scale
+                legal_x = legal_right_x - scaled_legal_w_mm
+                legal_y = legal_bottom_limit_y - scaled_legal_h_mm
 
             self._draw_legal(
                 pdf, sku_config, legal_x, legal_y,
