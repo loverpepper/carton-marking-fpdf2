@@ -96,6 +96,7 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
         """加载 MCombo 通用箱唛标准样式的图片资源。
         翻盖图标因需要旋转操作，保留为 PIL Image；其余资源存储为路径，fpdf2 直接接受。"""
         res_base = self.base_dir / 'assets' / 'Mcombo' / '样式一' / '矢量文件'
+        side_cert_base = self.base_dir / 'assets' / 'New-market' / '样式一' / '矢量文件'
         self.resources = {
             # 静态图标存储为路径，fpdf2 直接接受路径，无需 PIL 预加载
             'icon_trademark':       res_base / '正唛logo.png',
@@ -108,7 +109,10 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
             # 'icon_box_number_6':    res_base / '正唛 Box 6.png',
             'icon_side_label_box':  res_base / '侧唛标签框.png',
             'icon_side_logo':       res_base / '侧唛logo.png',
-            'icon_side_text_box':   res_base / '侧唛文本框.png',
+            'icon_side_text_box':   general_functions.make_it_pure_black(
+                                        Image.open(side_cert_base / '条码框-去掉竖线.png').convert('RGBA')),
+            'icon_side_FSC':        general_functions.make_it_pure_black(
+                                        Image.open(side_cert_base / 'FSC.png').convert('RGBA')),
             'icon_flap_multibox':    res_base / '顶部-左-多箱.png',
             'icon_flap_keepboxes':  res_base / '通用箱唛-保留盒子.png',
             'icon_flap_over70lbs':  res_base / '通用箱唛-超70lbs.png',
@@ -645,12 +649,15 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
                   w=side_logo_w_mm, h=side_logo_h_mm)
 
         # ── 4. 侧唛文本框（含 G.W.、尺寸、条形码）──────────────────────────────
-        icon_text_box = self.resources['icon_side_text_box']
-        table_h_mm = 80.0   # 8 cm
-        with Image.open(icon_text_box) as _img:
-            _tw, _th = _img.size
-        table_w_mm = table_h_mm * _tw / _th
-
+        # 保持文本框原始比例等比放大，确保 SKU 条码宽度不小于 120 mm。
+        min_sku_barcode_w_mm = 120.0
+        sku_barcode_w_ratio = 0.45
+        text_box_img = self.resources['icon_side_text_box']
+        text_box_aspect = text_box_img.width / text_box_img.height
+        table_h_mm = max(
+            80.0,
+            min_sku_barcode_w_mm / (sku_barcode_w_ratio * text_box_aspect),
+        )
         spacing_left_mm   = 28.1   # 2.81 cm
         spacing_bottom_mm = 30.0   # 3 cm
         table_y = (y_mm + h_mm
@@ -658,19 +665,29 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
                    - spacing_bottom_mm
                    - table_h_mm)
 
-        if sku_config.sponge_verified:
-            icon_sponge = self.resources['icon_side_sponge']
-            sponge_w_mm = table_h_mm * icon_sponge.width / icon_sponge.height
-            sponge_x = x_mm + spacing_left_mm
-            pdf.image(icon_sponge,
-                      x=sponge_x, y=table_y,
-                      w=sponge_w_mm, h=table_h_mm)
-            table_x = sponge_x + sponge_w_mm + 1.0   # 0.1cm 间距
-        else:
-            table_x = x_mm + spacing_left_mm
+        gap_mm = 3.0
+        current_x = x_mm + spacing_left_mm
 
-        pdf.image(icon_text_box,
-                  x=table_x, y=table_y,
+        def _embed_h(res_key):
+            img = self.resources[res_key]
+            width_mm = table_h_mm * img.width / img.height
+            return img, width_mm
+
+        if getattr(sku_config, 'sponge_verified', False):
+            sponge_img, sponge_w_mm = _embed_h('icon_side_sponge')
+            pdf.image(sponge_img, x=current_x, y=table_y,
+                      w=sponge_w_mm, h=table_h_mm)
+            current_x += sponge_w_mm + gap_mm
+
+        if getattr(sku_config, 'show_fsc', False):
+            fs_img, fs_w = _embed_h('icon_side_FSC')
+            pdf.image(fs_img, x=current_x, y=table_y,
+                      w=fs_w, h=table_h_mm)
+            current_x += fs_w + gap_mm
+
+        icon_text_box, table_w_mm = _embed_h('icon_side_text_box')
+        table_x = current_x
+        pdf.image(icon_text_box, x=table_x, y=table_y,
                   w=table_w_mm, h=table_h_mm)
 
         # 在文本框上叠加动态内容
@@ -697,7 +714,7 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
         barcode_pt = barcode_px * 72.0 / ppi
 
         # 文字区 X 起点（局部表格宽度的 65.1%）
-        text_x = x_mm + w_mm * 0.651
+        text_x = x_mm + w_mm * 0.55
 
         weight_text = (f'G.W./N.W.: {sku_config.side_text["gw_value"] * 0.453592:.1f} / '
                        f'{sku_config.side_text["nw_value"] * 0.453592:.1f} Kg')
@@ -710,14 +727,20 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
                                  dim_text, 'AvantGardeLT-Demi', '', label_pt, pil_label, ppi)
 
         # 条形码区域参数
-        left_center_mm  = x_mm + w_mm * 0.46    # SKU 条码中心
-        right_center_mm = x_mm + w_mm * 0.847   # SN  条码中心
+        left_center_mm  = x_mm + w_mm * 0.25    # SKU 条码中心
+        right_center_mm = x_mm + w_mm * 0.75    # SN  条码中心
         barcode_y_mm    = y_mm + h_mm * 0.42
         barcode_text_y  = y_mm + h_mm * 0.76
         barcode_h_mm    = h_mm * 0.35
 
+        # 拆分后的条码框不再自带中间分隔线。
+        pdf.set_draw_color(0, 0, 0)
+        pdf.set_line_width(3.0 * 25.4 / ppi)
+        pdf.line(x_mm + w_mm * 0.5, y_mm + h_mm * 0.36,
+                 x_mm + w_mm * 0.5, y_mm + h_mm * 0.855)
+
         # SKU 条形码
-        sku_bc_w_mm = w_mm * 0.46
+        sku_bc_w_mm = max(120.0, w_mm * 0.45)
         sku_bc_img = generate_barcode_image(
             sku_config.sku_name,
             int(sku_bc_w_mm * px_per_mm),
@@ -733,7 +756,7 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
 
         # SN 条形码
         sn_code = sku_config.side_text['sn_code']
-        sn_bc_w_mm = w_mm * 0.28
+        sn_bc_w_mm = w_mm * 0.45
         sn_bc_img = generate_barcode_image(
             sn_code,
             int(sn_bc_w_mm * px_per_mm),
@@ -749,5 +772,5 @@ class MComboGeneralStandardStyle(BoxMarkStyle):
 
         # MADE IN CHINA（或自定义产地文字）
         made_text = sku_config.side_text.get('origin_text', 'MADE IN CHINA')
-        self._draw_text_top_left(pdf, x_mm + w_mm * 0.51, y_mm + h_mm * 0.87,
+        self._draw_text_top_left(pdf, x_mm + w_mm * 0.41, y_mm + h_mm * 0.89,
                                  made_text, 'Calibri-Bold', '', bold_pt, pil_bold, ppi)

@@ -138,6 +138,14 @@ class MComboStandardStyle(BoxMarkStyle):
             'legal_icon_WEEE': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2回收.png').convert('RGBA')),
             'legal_icon_GreenDot': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-3-2绿点.png').convert('RGBA')),
             'legal_icon_4': general_functions.make_it_pure_black(Image.open(self.res_base / '法律标-4.png').convert('RGBA')),
+
+            # 新的小icon
+            'icon_Mobious-Loop': general_functions.make_it_pure_black(Image.open(self.res_base / 'newicon_Mobius-Loop.png').convert('RGBA')),
+            'icon_PAP20': general_functions.make_it_pure_black(Image.open(self.res_base / 'newicon_PAP20.png').convert('RGBA')),
+            'icon_PE-LD04': general_functions.make_it_pure_black(Image.open(self.res_base / 'newicon_PE-LD04.png').convert('RGBA')),
+            'icon_Raccolta': general_functions.make_it_pure_black(Image.open(self.res_base / 'newicon_Raccolta.png').convert('RGBA')),
+            'icon_RECICLA': general_functions.make_it_pure_black(Image.open(self.res_base / 'newicon_RECICLA.png').convert('RGBA')),
+            'icon_SECURITE': general_functions.make_it_pure_black(Image.open(self.res_base / 'newicon_SECURITE.png').convert('RGBA')),
         }
 
     def _load_fonts(self):
@@ -677,7 +685,9 @@ class MComboStandardStyle(BoxMarkStyle):
                 Image.open(legal_icon_file).convert('RGBA'))
 
             base_legal_w_mm = 224.0
-            base_legal_h_mm = 140.0
+            # 57 mm 文字区 + 20 mm 原认证图标区 + 20 mm 新图标区
+            # + 63 mm 底部说明图区。
+            base_legal_h_mm = 160.0
             right_margin_mm = 30.0
 
             legal_right_x = o_x + eff_w - right_margin_mm
@@ -801,14 +811,15 @@ class MComboStandardStyle(BoxMarkStyle):
         """Draw the legal label as fpdf2 vectors at the calculated size."""
         design_ppi = float(sku_config.ppi)
         base_w_mm = 224.0
-        base_h_mm = 140.0
+        base_h_mm = 160.0
         sx = box_w_mm / base_w_mm
         sy = box_h_mm / base_h_mm
         scale = min(sx, sy)
 
         row1_h = 57.0 * sy
         row2_h = 20.0 * sy
-        row3_h = box_h_mm - row1_h - row2_h
+        row3_h = 20.0 * sy
+        row4_h = box_h_mm - row1_h - row2_h - row3_h
 
         lw_thin = max(0.12, 5.0 * 25.4 / design_ppi * scale)
         lw_thick = max(0.16, 7.0 * 25.4 / design_ppi * scale)
@@ -821,6 +832,8 @@ class MComboStandardStyle(BoxMarkStyle):
         pdf.line(x_mm, y_mm + row1_h, x_mm + box_w_mm, y_mm + row1_h)
         pdf.line(x_mm, y_mm + row1_h + row2_h,
                  x_mm + box_w_mm, y_mm + row1_h + row2_h)
+        pdf.line(x_mm, y_mm + row1_h + row2_h + row3_h,
+                 x_mm + box_w_mm, y_mm + row1_h + row2_h + row3_h)
 
         scale_r1 = 0.85
         if getattr(sku_config, 'GE', 0) == 1:
@@ -882,13 +895,59 @@ class MComboStandardStyle(BoxMarkStyle):
             pdf.image(img, x=cur_x, y=iy, w=iw, h=ih)
             cur_x += iw + icon_gap_mm
 
-        icon_4 = self.resources['legal_icon_4']
-        i4_h = row3_h * 0.85
-        i4_w = i4_h * icon_4.width / icon_4.height
+        # 新增的第 4 区：与上方认证图标区等高，六个图标全部展示。
+        row3_icons = [
+            self.resources['icon_Mobious-Loop'],
+            self.resources['icon_PAP20'],
+            self.resources['icon_PE-LD04'],
+            self.resources['icon_Raccolta'],
+            self.resources['icon_RECICLA'],
+            self.resources['icon_SECURITE'],
+        ]
+        row3_icon_h = row3_h * 0.7
+        row3_gap_mm = 5.0 * sx
+        row3_sizes = [
+            (img, row3_icon_h * img.width / img.height, row3_icon_h)
+            for img in row3_icons
+        ]
+
+        # 在非标准比例的输出中仍保证六个图标不超出方框。
+        row3_available_w = max(1.0, box_w_mm - 10.0 * sx)
+        row3_total_w = (
+            sum(iw for _, iw, _ in row3_sizes)
+            + row3_gap_mm * (len(row3_sizes) - 1)
+        )
+        if row3_total_w > row3_available_w:
+            icons_available_w = max(
+                1.0,
+                row3_available_w - row3_gap_mm * (len(row3_sizes) - 1),
+            )
+            icon_scale = icons_available_w / sum(
+                iw for _, iw, _ in row3_sizes
+            )
+            row3_sizes = [
+                (img, iw * icon_scale, ih * icon_scale)
+                for img, iw, ih in row3_sizes
+            ]
+            row3_total_w = (
+                sum(iw for _, iw, _ in row3_sizes)
+                + row3_gap_mm * (len(row3_sizes) - 1)
+            )
+
         row3_y = y_mm + row1_h + row2_h
+        cur_x = x_mm + (box_w_mm - row3_total_w) / 2.0
+        for img, iw, ih in row3_sizes:
+            iy = row3_y + (row3_h - ih) / 2.0
+            pdf.image(img, x=cur_x, y=iy, w=iw, h=ih)
+            cur_x += iw + row3_gap_mm
+
+        icon_4 = self.resources['legal_icon_4']
+        i4_h = row4_h * 0.85
+        i4_w = i4_h * icon_4.width / icon_4.height
+        row4_y = y_mm + row1_h + row2_h + row3_h
         pdf.image(icon_4,
                   x=x_mm + (box_w_mm - i4_w) / 2.0,
-                  y=row3_y + (row3_h - i4_h) / 2.0,
+                  y=row4_y + (row4_h - i4_h) / 2.0,
                   w=i4_w, h=i4_h)
 
     def _draw_legal_text(self, pdf, sku_config, x_mm, y_mm,
